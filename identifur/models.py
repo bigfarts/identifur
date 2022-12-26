@@ -32,3 +32,9 @@ def vit_l_16(pretrained, num_classes, requires_grad):
         )
     )
     return model
+
+
+MODELS = {
+    "resnet152": (resnet152, (224, 224)),
+    "vit_l_16": (vit_l_16, (224, 224)),
+}

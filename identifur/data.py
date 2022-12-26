@@ -1,3 +1,4 @@
+import enum
 import torch
 import logging
 import os
@@ -5,14 +6,16 @@ from torch.utils.data import Dataset
 import sqlite3
 from PIL import Image
 
-CATEGORY_GENERAL = 0
-CATEGORY_ARTIST = 1
-CATEGORY_COPYRIGHT = 3
-CATEGORY_CHARACTER = 4
-CATEGORY_SPECIES = 5
-CATEGORY_INVALID = 6
-CATEGORY_META = 7
-CATEGORY_LORE = 8
+
+class Category(enum.Enum):
+    GENERAL = 0
+    ARTIST = 1
+    COPYRIGHT = 3
+    CHARACTER = 4
+    SPECIES = 5
+    INVALID = 6
+    META = 7
+    LORE = 8
 
 
 def split_id(id, depth=3, factor=1000):
@@ -36,10 +39,10 @@ def load_tags(db, min_post_count):
             "SELECT name FROM tags WHERE post_count >= ? AND category IN (?, ?, ?, ?)",
             [
                 min_post_count,
-                CATEGORY_GENERAL,
-                CATEGORY_CHARACTER,
-                CATEGORY_COPYRIGHT,
-                CATEGORY_SPECIES,
+                Category.GENERAL.value,
+                Category.CHARACTER.value,
+                Category.COPYRIGHT.value,
+                Category.SPECIES.value,
             ],
         )
         return [name for name, in cur]
@@ -48,23 +51,27 @@ def load_tags(db, min_post_count):
 
 
 class E621Dataset(Dataset):
-    def __init__(self, db_path, dataset_path="dataset", tag_min_post_count=2500):
-        self.db = sqlite3.connect(db_path)
-
-        self.tags = load_tags(self.db, tag_min_post_count)
+    def __init__(self, db, tags, dataset_path="dataset", max_id=None):
+        self.db = db
+        self.tags = tags
         self.dataset_path = dataset_path
+        self.max_id = max_id
 
-        cur = self.db.cursor()
-        try:
-            cur.execute("SELECT MAX(id) + 1 FROM posts")
-            (self.n,) = cur.fetchone()
-        finally:
-            cur.close()
+        if self.max_id is None:
+            cur = self.db.cursor()
+            try:
+                cur.execute("SELECT MAX(id) FROM posts")
+                (self.max_id,) = cur.fetchone()
+            finally:
+                cur.close()
 
     def __len__(self):
-        return self.n
+        return self.max_id + 1
 
     def __getitem__(self, index):
+        if index > self.max_id:
+            raise IndexError
+
         try:
             img = None
             fsid = format_id(split_id(index))

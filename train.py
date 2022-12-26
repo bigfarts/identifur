@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 import argparse
 import torch
+import sqlite3
 import logging
 from identifur import models
-from identifur.data import E621Dataset
+from identifur.data import E621Dataset, load_tags
 from torch import optim, nn
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader, random_split
-from torch.utils.data.dataloader import default_collate
+from torch.utils.data import Dataset, DataLoader, random_split, default_collate
 from ignite.engine import create_supervised_trainer, create_supervised_evaluator, Events
 from ignite.metrics import Accuracy, Loss
 from ignite.handlers import (
@@ -43,13 +43,14 @@ class TransformingDataset(Dataset):
         return self.transform(image), label
 
 
-def collate_fn(batch):
+def collate(batch):
     return default_collate([item for item in batch if item is not None])
 
 
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
+    argparser.add_argument("--base-model", default="vit_l_16")
     argparser.add_argument("--dataset-path", default="dataset")
     argparser.add_argument("--random-split-seed", default=42, type=int)
     argparser.add_argument("--batch-size", default=64, type=int)
@@ -68,21 +69,25 @@ def main():
     )
     args = argparser.parse_args()
 
-    ds = E621Dataset(args.data_db, args.dataset_path, args.tag_min_post_count)
+    db = sqlite3.connect(args.data_db)
+    tags = load_tags(db, args.tag_min_post_count)
 
-    logging.info("loaded dataset with %d tags", len(ds.tags))
+    logging.info("loaded %d tags", len(tags))
 
     device = torch.device("cuda")
 
-    model = models.vit_l_16(
-        pretrained=True, requires_grad=False, num_classes=len(ds.tags)
-    ).to(device)
+    model, input_size = models.MODELS[args.base_model]
+    model = model(pretrained=True, requires_grad=False, num_classes=len(tags)).to(
+        device
+    )
 
     optimizer = optim.Adam(
         model.parameters(),
         lr=0.0001 if args.learning_rate is None else args.learning_rate,
     )
     criterion = nn.BCEWithLogitsLoss()
+
+    ds = E621Dataset(db, tags, args.dataset_path, max_id=1000)
 
     train_data, val_data, test_data = random_split(
         ds,
@@ -95,7 +100,7 @@ def main():
             train_data,
             transforms.Compose(
                 [
-                    transforms.Resize((224, 224)),
+                    transforms.Resize(input_size),
                     transforms.RandomHorizontalFlip(p=0.5),
                     transforms.RandomRotation(degrees=45),
                     transforms.ToTensor(),
@@ -103,8 +108,8 @@ def main():
             ),
         ),
         batch_size=args.batch_size,
+        collate_fn=collate,
         shuffle=True,
-        collate_fn=collate_fn,
     )
 
     to_save = {"model": model, "optimizer": optimizer}
@@ -135,8 +140,8 @@ def main():
             ),
         ),
         batch_size=args.batch_size,
+        collate_fn=collate,
         shuffle=False,
-        collate_fn=collate_fn,
     )
 
     trainer.add_event_handler(
