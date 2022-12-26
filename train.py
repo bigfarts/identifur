@@ -7,7 +7,7 @@ from identifur import models
 from identifur.data import E621Dataset, load_tags
 from torch import optim, nn
 from torchvision import transforms
-from torch.utils.data import Dataset, DataLoader, random_split, default_collate
+from torch.utils.data import Dataset, DataLoader, random_split
 from ignite.engine import create_supervised_trainer, create_supervised_evaluator, Events
 from ignite.metrics import Accuracy, Loss
 from ignite.handlers import (
@@ -41,10 +41,6 @@ class TransformingDataset(Dataset):
             return None
         image, label = item
         return self.transform(image), label
-
-
-def collate(batch):
-    return default_collate([item for item in batch if item is not None])
 
 
 def main():
@@ -115,7 +111,6 @@ def main():
             ),
         ),
         batch_size=args.batch_size,
-        collate_fn=collate,
         shuffle=True,
     )
 
@@ -147,7 +142,6 @@ def main():
             ),
         ),
         batch_size=args.batch_size,
-        collate_fn=collate,
         shuffle=False,
     )
 
