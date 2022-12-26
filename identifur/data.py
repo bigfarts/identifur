@@ -43,7 +43,7 @@ def load_tags(db, min_post_count):
                 Category.SPECIES.value,
             ],
         )
-        return [name for name, in cur]
+        return [name for name, in cur] + [f"rating: {r}" for r in "sqe"]
     finally:
         cur.close()
 
@@ -92,12 +92,13 @@ class E621Dataset(Dataset):
 
         cur = self.db.cursor()
         try:
-            cur.execute("SELECT tag_string FROM posts WHERE id = ?", [id])
-            (tag_string,) = cur.fetchone()
+            cur.execute("SELECT tag_string, rating FROM posts WHERE id = ?", [id])
+            (tag_string, rating) = cur.fetchone()
         finally:
             cur.close()
 
         tags = set(tag_string.split(" "))
+        tags.add(f"rating: {rating}")
 
         img = img.convert("RGB")
         return (
