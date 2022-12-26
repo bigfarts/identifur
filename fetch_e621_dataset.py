@@ -11,7 +11,7 @@ from identifur.data import split_id, format_id
 logging.basicConfig(level=logging.INFO)
 
 
-async def fetch(output_path, db, data_db, id, prefer_sample):
+async def fetch(output_path, db, data_db, id, fetch_full_image):
     fsid = format_id(split_id(id))
     try:
         os.makedirs(os.path.join(output_path, *fsid[:-1]))
@@ -37,7 +37,8 @@ async def fetch(output_path, db, data_db, id, prefer_sample):
 
     async with aiohttp.ClientSession() as session:
         resp = None
-        if prefer_sample:
+        if not fetch_full_image:
+            # Prefer samples, since we don't actually process the whole thing anyway.
             resp = await session.get(
                 f"https://static1.e621.net/data/sample/{split_path}.jpg"
             )
@@ -70,19 +71,19 @@ async def fetch(output_path, db, data_db, id, prefer_sample):
         db.commit()
 
 
-async def worker(output_path, db, data_db, queue, prefer_sample):
+async def worker(output_path, db, data_db, queue, fetch_full_image):
     try:
         while True:
             id = await queue.get()
-            await guarded_fetch(output_path, db, data_db, id, prefer_sample)
+            await guarded_fetch(output_path, db, data_db, id, fetch_full_image)
             queue.task_done()
     except asyncio.CancelledError:
         return
 
 
-async def guarded_fetch(output_path, db, data_db, id, prefer_sample):
+async def guarded_fetch(output_path, db, data_db, id, fetch_full_image):
     try:
-        await fetch(output_path, db, data_db, id, prefer_sample)
+        await fetch(output_path, db, data_db, id, fetch_full_image)
     except Exception:
         logging.exception("failed to download %d", id)
 
@@ -93,7 +94,7 @@ async def main():
     argparser.add_argument("--dls-db", default="dls.db")
     argparser.add_argument("--num-workers", default=16, type=int)
     argparser.add_argument("--output-path", default="dataset")
-    argparser.add_argument("--prefer-sample", default=True, type=bool)
+    argparser.add_argument("--fetch-full-image", default=False, action="store_true")
     args = argparser.parse_args()
 
     queue = asyncio.Queue(args.num_workers)
@@ -103,7 +104,7 @@ async def main():
 
     workers = [
         asyncio.create_task(
-            worker(args.output_path, db, data_db, queue, args.prefer_sample)
+            worker(args.output_path, db, data_db, queue, args.fetch_full_image)
         )
         for _ in range(args.num_workers)
     ]

@@ -10,7 +10,12 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from torch.utils.data.dataloader import default_collate
 from ignite.engine import create_supervised_trainer, create_supervised_evaluator, Events
 from ignite.metrics import Accuracy, Loss
-from ignite.handlers import FastaiLRFinder, Checkpoint, global_step_from_engine
+from ignite.handlers import (
+    FastaiLRFinder,
+    Checkpoint,
+    global_step_from_engine,
+    DiskSaver,
+)
 from ignite.contrib.handlers.tqdm_logger import ProgressBar
 
 logging.basicConfig(
@@ -47,6 +52,7 @@ def main():
     argparser.add_argument("data_db")
     argparser.add_argument("--dataset-path", default="dataset")
     argparser.add_argument("--random-split-seed", default=42, type=int)
+    argparser.add_argument("--batch-size", default=64, type=int)
     argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     argparser.add_argument("--learning-rate", default=None, type=float)
     argparser.add_argument("--trainer-log-interval", default=100, type=int)
@@ -57,6 +63,9 @@ def main():
     argparser.add_argument("--train-data-split", default=0.6, type=float)
     argparser.add_argument("--validation-data-split", default=0.2, type=float)
     argparser.add_argument("--test-data-split", default=0.2, type=float)
+    argparser.add_argument(
+        "--allow-checkpoints-dir-empty", default=False, action="store_true"
+    )
     args = argparser.parse_args()
 
     ds = E621Dataset(args.data_db, args.dataset_path, args.tag_min_post_count)
@@ -65,11 +74,10 @@ def main():
 
     device = torch.device("cuda")
 
-    model = models.model(
-        pretrained=True, requires_grad=False, out_features=len(ds.tags)
+    model = models.vit_l_16(
+        pretrained=True, requires_grad=False, num_classes=len(ds.tags)
     ).to(device)
 
-    batch_size = 64
     optimizer = optim.Adam(
         model.parameters(),
         lr=0.0001 if args.learning_rate is None else args.learning_rate,
@@ -87,29 +95,15 @@ def main():
             train_data,
             transforms.Compose(
                 [
-                    transforms.Resize((400, 400)),
+                    transforms.Resize((224, 224)),
                     transforms.RandomHorizontalFlip(p=0.5),
                     transforms.RandomRotation(degrees=45),
                     transforms.ToTensor(),
                 ]
             ),
         ),
-        batch_size=batch_size,
+        batch_size=args.batch_size,
         shuffle=True,
-        collate_fn=collate_fn,
-    )
-    val_loader = DataLoader(
-        TransformingDataset(
-            val_data,
-            transforms.Compose(
-                [
-                    transforms.Resize((400, 400)),
-                    transforms.ToTensor(),
-                ]
-            ),
-        ),
-        batch_size=batch_size,
-        shuffle=False,
         collate_fn=collate_fn,
     )
 
@@ -118,15 +112,52 @@ def main():
     trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
     ProgressBar().attach(trainer)
 
+    if args.learning_rate is None:
+        logging.info("no learning rate specified, will try to find one")
+        lr_finder = FastaiLRFinder()
+        with lr_finder.attach(trainer, to_save, end_lr=1e-02) as trainer_with_lr_finder:
+            trainer_with_lr_finder.run(train_loader)
+        logging.info(
+            "LR finder logs: %s, suggested LR: %.8f",
+            lr_finder.get_results(),
+            lr_finder.lr_suggestion(),
+        )
+        lr_finder.apply_suggested_lr(optimizer)
+
+    val_loader = DataLoader(
+        TransformingDataset(
+            val_data,
+            transforms.Compose(
+                [
+                    transforms.Resize((224, 224)),
+                    transforms.ToTensor(),
+                ]
+            ),
+        ),
+        batch_size=args.batch_size,
+        shuffle=False,
+        collate_fn=collate_fn,
+    )
+
     trainer.add_event_handler(
         Events.ITERATION_COMPLETED(every=args.trainer_iteration_checkpoint_intervals),
-        Checkpoint(to_save, "models/current_iteration", n_saved=2),
+        Checkpoint(
+            to_save,
+            DiskSaver(
+                "models/current_iteration",
+                require_empty=not args.allow_checkpoints_dir_empty,
+            ),
+            n_saved=2,
+        ),
     )
     trainer.add_event_handler(
         Events.EPOCH_COMPLETED,
         Checkpoint(
             to_save,
-            "models/epoch",
+            DiskSaver(
+                "models/epoch",
+                require_empty=not args.allow_checkpoints_dir_empty,
+            ),
             n_saved=2,
             global_step_transform=lambda *_: trainer.state.epoch,
         ),
@@ -189,25 +220,16 @@ def main():
         Events.COMPLETED,
         Checkpoint(
             to_save,
-            "models/best",
+            DiskSaver(
+                "models/best",
+                require_empty=not args.allow_checkpoints_dir_empty,
+            ),
             n_saved=2,
             filename_prefix="best",
             score_name="accuracy",
             global_step_transform=global_step_from_engine(trainer),
         ),
     )
-
-    if args.learning_rate is None:
-        logging.info("no learning rate specified, will try to find one")
-        lr_finder = FastaiLRFinder()
-        with lr_finder.attach(trainer, to_save, end_lr=1e-02) as trainer_with_lr_finder:
-            trainer_with_lr_finder.run(train_loader)
-        logging.info(
-            "LR finder logs: %s, suggested LR: %.8f",
-            lr_finder.get_results(),
-            lr_finder.lr_suggestion(),
-        )
-        lr_finder.apply_suggested_lr(optimizer)
 
     trainer.run(train_loader, max_epochs=args.max_epochs)
 

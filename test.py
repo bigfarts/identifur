@@ -21,8 +21,8 @@ def main():
     device = torch.device("cuda")
 
     checkpoint = torch.load(args.checkpoint, map_location=device)
-    model = models.model(
-        out_features=len(ds.tags), pretrained=False, requires_grad=False
+    model = models.vit_l_16(
+        num_classes=len(ds.tags), pretrained=False, requires_grad=False
     ).to(device)
     model.load_state_dict(checkpoint["model"])
     model.eval()
