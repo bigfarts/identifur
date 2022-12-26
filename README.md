@@ -45,3 +45,7 @@ python3 test.py data-$DATE.db models/best/$MODEL.pt image.jpg
 ```
 
 maybe the model works idk lol
+
+## about the model
+
+identifur uses a resnet-152 model pretrained against imagenet that is then trained against a tagged data set. each tag is a column in the label tensor.
