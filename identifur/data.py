@@ -76,38 +76,34 @@ class E621Dataset(Dataset):
         finally:
             cur.close()
 
-        try:
-            img = None
-            fsid = format_id(split_id(id))
-            for ext in (".jpg", ".png"):
-                path = os.path.join(self.dataset_path, *fsid[:-1], fsid[-1] + ext)
-                try:
-                    f = open(path, "rb")
-                except FileNotFoundError:
-                    continue
-
-                img = Image.open(f)
-
-            if img is None:
-                raise ValueError("image not found")
-
-            cur = self.db.cursor()
+        img = None
+        fsid = format_id(split_id(id))
+        for ext in (".jpg", ".png"):
+            path = os.path.join(self.dataset_path, *fsid[:-1], fsid[-1] + ext)
             try:
-                cur.execute("SELECT tag_string FROM posts WHERE id = ?", [id])
-                (tag_string,) = cur.fetchone()
-            finally:
-                cur.close()
+                f = open(path, "rb")
+            except FileNotFoundError:
+                continue
 
-            tags = set(tag_string.split(" "))
+            img = Image.open(f)
 
-            img = img.convert("RGB")
-            return (
-                img,
-                torch.tensor(
-                    [1 if tag in tags else 0 for tag in self.tags],
-                    dtype=torch.float32,
-                ),
-            )
-        except Exception as e:
-            # TODO: maybe pick another image at random?
-            raise ValueError(f"failed to open {id}") from e
+        if img is None:
+            raise FileNotFoundError("image not found")
+
+        cur = self.db.cursor()
+        try:
+            cur.execute("SELECT tag_string FROM posts WHERE id = ?", [id])
+            (tag_string,) = cur.fetchone()
+        finally:
+            cur.close()
+
+        tags = set(tag_string.split(" "))
+
+        img = img.convert("RGB")
+        return (
+            img,
+            torch.tensor(
+                [1 if tag in tags else 0 for tag in self.tags],
+                dtype=torch.float32,
+            ),
+        )

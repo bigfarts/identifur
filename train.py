@@ -27,6 +27,23 @@ logging.basicConfig(
 )
 
 
+class SafeDataset(Dataset):
+    def __init__(self, ds):
+        self.ds = ds
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, index):
+        n = len(self)
+        while True:
+            try:
+                return self[index]
+            except Exception:
+                logging.exception("failed to open %d, will pick next one", index)
+            index = (index + 1) % n
+
+
 class TransformingDataset(Dataset):
     def __init__(self, ds, transform):
         self.ds = ds
@@ -90,7 +107,7 @@ def main():
     )
     criterion = nn.BCEWithLogitsLoss()
 
-    ds = E621Dataset(dls_db, db, tags, args.dataset_path)
+    ds = SafeDataset(E621Dataset(dls_db, db, tags, args.dataset_path))
 
     train_data, val_data, test_data = random_split(
         ds,
