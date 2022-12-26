@@ -17,6 +17,7 @@ def main():
     argparser.add_argument("data_db")
     argparser.add_argument("--blacklisted-tags", default="loli,shota")
     argparser.add_argument("--minimum-score", default=0, type=int)
+    argparser.add_argument("--minimum-tag-count", default=0, type=int)
     argparser.add_argument("--maximum-rating", default="e")
     argparser.add_argument("--output-db-path", default="dls.db")
     args = argparser.parse_args()
@@ -41,9 +42,10 @@ def main():
     allowed_ratings = RATINGS[: RATINGS.index(args.maximum_rating) + 1]
 
     logging.info(
-        "making dls db\nblacklisted tags: %s\nminimum score: %d\nallowed ratings: %s",
+        "making dls db\nblacklisted tags: %s\nminimum score: %d\nminimum tag count: %d\nallowed ratings: %s",
         blacklisted_tags,
         args.minimum_score,
+        args.minimum_tag_count,
         allowed_ratings,
     )
 
@@ -62,7 +64,9 @@ def main():
         )
         for id, tag_string in tqdm(cur, total=n):
             tags = tag_string.split(" ")
-            if any(tag in blacklisted_tags for tag in tags):
+            if len(tags) < args.minimum_tag_count or any(
+                tag in blacklisted_tags for tag in tags
+            ):
                 continue
 
             db.execute("""INSERT OR IGNORE INTO downloads(id) VALUES(?)""", [id])
