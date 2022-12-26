@@ -1,0 +1,8 @@
+/.vscode
+/dataset
+/models
+*.log
+*.db
+*.db-journal
+__pycache__
+test.png

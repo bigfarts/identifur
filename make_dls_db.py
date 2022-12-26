@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+import argparse
+import logging
+import csv
+import sqlite3
+from tqdm import tqdm
+
+csv.field_size_limit(2147483647)
+
+logging.basicConfig(level=logging.INFO)
+
+RATINGS = "sqe"
+
+
+def main():
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("data_db")
+    argparser.add_argument("--blacklisted-tags", default="loli,shota")
+    argparser.add_argument("--minimum-score", default=0, type=int)
+    argparser.add_argument("--maximum-rating", default="e")
+    argparser.add_argument("--output-db-path", default="dls.db")
+    args = argparser.parse_args()
+
+    blacklisted_tags = set(
+        args.blacklisted_tags.split(",") if args.blacklisted_tags else []
+    )
+
+    db = sqlite3.connect(args.output_db_path)
+    db.execute(
+        """
+    CREATE TABLE IF NOT EXISTS downloads
+        ( id INTEGER PRIMARY KEY
+        , downloaded INTEGER NOT NULL DEFAULT FALSE  -- actually bool
+        )
+    STRICT
+    """
+    )
+
+    data_db = sqlite3.connect(args.data_db)
+
+    allowed_ratings = RATINGS[: RATINGS.index(args.maximum_rating) + 1]
+
+    logging.info(
+        "making dls db\nblacklisted tags: %s\nminimum score: %d\nallowed ratings: %s",
+        blacklisted_tags,
+        args.minimum_score,
+        allowed_ratings,
+    )
+
+    cur = data_db.cursor()
+    try:
+        cur.execute("SELECT COUNT(*) FROM posts")
+        (n,) = cur.fetchone()
+    finally:
+        cur.close()
+
+    cur = data_db.cursor()
+    try:
+        cur.execute(
+            "SELECT id, tag_string FROM posts WHERE NOT is_deleted AND NOT is_pending AND score >= ? AND INSTR(?, rating)",
+            [args.minimum_score, allowed_ratings],
+        )
+        for id, tag_string in tqdm(cur, total=n):
+            tags = tag_string.split(" ")
+            if any(tag in blacklisted_tags for tag in tags):
+                continue
+
+            db.execute("""INSERT OR IGNORE INTO downloads(id) VALUES(?)""", [id])
+
+        db.execute(
+            """CREATE INDEX IF NOT EXISTS downloads_downloaded ON downloads(downloaded)"""
+        )
+        db.commit()
+    finally:
+        cur.close()
+
+
+if __name__ == "__main__":
+    main()
