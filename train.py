@@ -198,7 +198,7 @@ def main():
     )
 
     if args.learning_rate is None:
-        logging.info("no learning rate found, will try to find one")
+        logging.info("no learning rate specified, will try to find one")
         lr_finder = FastaiLRFinder()
         with lr_finder.attach(trainer, to_save, end_lr=1e-02) as trainer_with_lr_finder:
             trainer_with_lr_finder.run(train_loader)

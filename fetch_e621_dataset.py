@@ -11,7 +11,7 @@ from identifur.data import split_id, format_id
 logging.basicConfig(level=logging.INFO)
 
 
-async def fetch(output_path, db, data_db, id):
+async def fetch(output_path, db, data_db, id, prefer_sample):
     fsid = format_id(split_id(id))
     try:
         os.makedirs(os.path.join(output_path, *fsid[:-1]))
@@ -36,16 +36,21 @@ async def fetch(output_path, db, data_db, id):
     split_path = f"{md5[0:2]}/{md5[2:4]}/{md5}"
 
     async with aiohttp.ClientSession() as session:
-        # Try get the sample first, because it's cheaper.
-        resp = await session.get(
-            f"https://static1.e621.net/data/sample/{split_path}.jpg"
-        )
-        if resp.status == 404:
+        resp = None
+        if prefer_sample:
+            resp = await session.get(
+                f"https://static1.e621.net/data/sample/{split_path}.jpg"
+            )
+            if resp.status == 404:
+                resp = None
+            else:
+                resp.raise_for_status()
+                file_ext = "jpg"
+
+        if resp is None:
             resp = await session.get(
                 f"https://static1.e621.net/data/{split_path}.{file_ext}"
             )
-        else:
-            file_ext = "jpg"
 
         if resp.status == 404:
             logging.warn("%d not found, skipping", id)
@@ -58,21 +63,26 @@ async def fetch(output_path, db, data_db, id):
         with open(
             os.path.join(output_path, *fsid[:-1], f"{fsid[-1]}.{file_ext}"), "wb"
         ) as f:
-            f.write(await resp.read())
+            async for data in resp.content.iter_any():
+                f.write(data)
 
         db.execute("UPDATE downloads SET downloaded = true WHERE id = ?", [id])
         db.commit()
 
 
-async def worker(output_path, db, data_db, queue):
-    while True:
-        id = await queue.get()
-        await guarded_fetch(output_path, db, data_db, id)
-
-
-async def guarded_fetch(output_path, db, data_db, id):
+async def worker(output_path, db, data_db, queue, prefer_sample):
     try:
-        await fetch(output_path, db, data_db, id)
+        while True:
+            id = await queue.get()
+            await guarded_fetch(output_path, db, data_db, id, prefer_sample)
+            queue.task_done()
+    except asyncio.CancelledError:
+        return
+
+
+async def guarded_fetch(output_path, db, data_db, id, prefer_sample):
+    try:
+        await fetch(output_path, db, data_db, id, prefer_sample)
     except Exception:
         logging.exception("failed to download %d", id)
 
@@ -83,6 +93,7 @@ async def main():
     argparser.add_argument("--dls-db", default="dls.db")
     argparser.add_argument("--num-workers", default=16, type=int)
     argparser.add_argument("--output-path", default="dataset")
+    argparser.add_argument("--prefer-sample", default=True, type=bool)
     args = argparser.parse_args()
 
     queue = asyncio.Queue(args.num_workers)
@@ -91,7 +102,9 @@ async def main():
     data_db = sqlite3.connect(args.data_db)
 
     workers = [
-        asyncio.create_task(worker(args.output_path, db, data_db, queue))
+        asyncio.create_task(
+            worker(args.output_path, db, data_db, queue, args.prefer_sample)
+        )
         for _ in range(args.num_workers)
     ]
 
@@ -102,16 +115,23 @@ async def main():
     finally:
         cur.close()
 
-    try:
+    async def leader():
         cur = db.cursor()
-        cur.execute("SELECT id FROM downloads WHERE NOT downloaded")
+        try:
+            cur.execute("SELECT id FROM downloads WHERE NOT downloaded")
 
-        pbar = tqdm(cur, total=n)
-        for (id,) in pbar:
-            pbar.set_description(f"{id}")
-            await queue.put(id)
-    finally:
-        cur.close()
+            pbar = tqdm(cur, total=n)
+            for (id,) in pbar:
+                pbar.set_description(f"{id}")
+                await queue.put(id)
+        finally:
+            cur.close()
+        await queue.join()
+
+        for worker in workers:
+            worker.cancel()
+
+    await asyncio.gather(*([leader()] + workers))
 
 
 if __name__ == "__main__":
