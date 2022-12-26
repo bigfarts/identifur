@@ -101,8 +101,6 @@ class E621Dataset(Dataset):
             tags = set(tag_string.split(" "))
 
             img = img.convert("RGB")
-            # TODO: Handle errors here.
-
             return (
                 img,
                 torch.tensor(
@@ -111,4 +109,5 @@ class E621Dataset(Dataset):
                 ),
             )
         except Exception as e:
+            # TODO: maybe pick another image at random?
             raise ValueError(f"failed to open {id}") from e
