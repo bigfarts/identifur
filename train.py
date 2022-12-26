@@ -219,7 +219,7 @@ def main():
     def thresholded_output_transform(output):
         y_pred, y = output
         y_pred = torch.sigmoid(y_pred)
-        y_pred = (y_pred > 0.55).float()
+        y_pred = torch.round(y_pred)
         return y_pred, y
 
     val_metrics = {
