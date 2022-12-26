@@ -35,13 +35,12 @@ class SafeDataset(Dataset):
         return len(self.ds)
 
     def __getitem__(self, index):
-        n = len(self)
         while True:
             try:
                 return self[index]
             except Exception:
                 logging.exception("failed to open %d, will pick next one", index)
-            index = (index + 1) % n
+            index = (index + 1) % len(self)
 
 
 class TransformingDataset(Dataset):
