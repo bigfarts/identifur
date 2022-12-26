@@ -1,6 +1,5 @@
 import enum
 import torch
-import logging
 import os
 from torch.utils.data import Dataset
 from PIL import Image
@@ -88,33 +87,28 @@ class E621Dataset(Dataset):
                     continue
 
                 img = Image.open(f)
-                img.load()
 
             if img is None:
-                return None
+                raise ValueError("image not found")
 
             cur = self.db.cursor()
             try:
                 cur.execute("SELECT tag_string FROM posts WHERE id = ?", [id])
-                row = cur.fetchone()
+                (tag_string,) = cur.fetchone()
             finally:
                 cur.close()
 
-            if row is None:
-                return None
-
-            (tag_string,) = row
-
             tags = set(tag_string.split(" "))
 
-            with img:
-                return (
-                    img.convert("RGB"),
-                    torch.tensor(
-                        [1 if tag in tags else 0 for tag in self.tags],
-                        dtype=torch.float32,
-                    ),
-                )
-        except Exception:
-            logging.exception("failed to open id %d", id)
-            return None
+            img = img.convert("RGB")
+            # TODO: Handle errors here.
+
+            return (
+                img,
+                torch.tensor(
+                    [1 if tag in tags else 0 for tag in self.tags],
+                    dtype=torch.float32,
+                ),
+            )
+        except Exception as e:
+            raise ValueError(f"failed to open {id}") from e
