@@ -50,6 +50,7 @@ def collate(batch):
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
+    argparser.add_argument("--dls-db", default="dls.db")
     argparser.add_argument("--base-model", default="vit_l_16")
     argparser.add_argument("--dataset-path", default="dataset")
     argparser.add_argument("--random-split-seed", default=42, type=int)
@@ -70,6 +71,12 @@ def main():
     args = argparser.parse_args()
 
     db = sqlite3.connect(args.data_db)
+    dls_db = sqlite3.connect(args.dls_db)
+
+    logging.info("vacuuming dls db to make rowids contiguous...")
+    dls_db.execute("VACUUM")
+    logging.info("done!")
+
     tags = load_tags(db, args.tag_min_post_count)
 
     logging.info("loaded %d tags", len(tags))
@@ -87,7 +94,7 @@ def main():
     )
     criterion = nn.BCEWithLogitsLoss()
 
-    ds = E621Dataset(db, tags, args.dataset_path, max_id=1000)
+    ds = E621Dataset(dls_db, db, tags, args.dataset_path)
 
     train_data, val_data, test_data = random_split(
         ds,

@@ -3,7 +3,6 @@ import torch
 import logging
 import os
 from torch.utils.data import Dataset
-import sqlite3
 from PIL import Image
 
 
@@ -51,30 +50,36 @@ def load_tags(db, min_post_count):
 
 
 class E621Dataset(Dataset):
-    def __init__(self, db, tags, dataset_path="dataset", max_id=None):
+    def __init__(self, dls_db, db, tags, dataset_path="dataset"):
+        self.dls_db = dls_db
         self.db = db
         self.tags = tags
         self.dataset_path = dataset_path
-        self.max_id = max_id
 
-        if self.max_id is None:
-            cur = self.db.cursor()
-            try:
-                cur.execute("SELECT MAX(id) FROM posts")
-                (self.max_id,) = cur.fetchone()
-            finally:
-                cur.close()
+        cur = self.dls_db.cursor()
+        try:
+            cur.execute("SELECT MAX(rowid) FROM downloaded")
+            (self.n,) = cur.fetchone()
+        finally:
+            cur.close()
 
     def __len__(self):
-        return self.max_id + 1
+        return self.n
 
     def __getitem__(self, index):
-        if index > self.max_id:
+        if index >= self.n:
             raise IndexError
+
+        cur = self.dls_db.cursor()
+        try:
+            cur.execute("SELECT post_id FROM downloaded WHERE rowid = ?", [index + 1])
+            (id,) = cur.fetchone()
+        finally:
+            cur.close()
 
         try:
             img = None
-            fsid = format_id(split_id(index))
+            fsid = format_id(split_id(id))
             for ext in (".jpg", ".png"):
                 path = os.path.join(self.dataset_path, *fsid[:-1], fsid[-1] + ext)
                 try:
@@ -90,7 +95,7 @@ class E621Dataset(Dataset):
 
             cur = self.db.cursor()
             try:
-                cur.execute("SELECT tag_string FROM posts WHERE id = ?", [index])
+                cur.execute("SELECT tag_string FROM posts WHERE id = ?", [id])
                 row = cur.fetchone()
             finally:
                 cur.close()
@@ -111,5 +116,5 @@ class E621Dataset(Dataset):
                     ),
                 )
         except Exception:
-            logging.exception("failed to open index %d", index)
+            logging.exception("failed to open id %d", id)
             return None

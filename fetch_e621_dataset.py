@@ -55,7 +55,7 @@ async def fetch(output_path, db, data_db, id, fetch_full_image):
 
         if resp.status == 404:
             logging.warn("%d not found, skipping", id)
-            db.execute("UPDATE downloads SET downloaded = true WHERE id = ?", [id])
+            db.execute("DELETE FROM pending WHERE post_id = ?", [id])
             db.commit()
             return
 
@@ -67,7 +67,8 @@ async def fetch(output_path, db, data_db, id, fetch_full_image):
             async for data in resp.content.iter_any():
                 f.write(data)
 
-        db.execute("UPDATE downloads SET downloaded = true WHERE id = ?", [id])
+        db.execute("INSERT INTO downloaded(post_id) VALUES(?)", [id])
+        db.execute("DELETE FROM pending WHERE post_id = ?", [id])
         db.commit()
 
 
@@ -111,7 +112,7 @@ async def main():
 
     cur = db.cursor()
     try:
-        cur.execute("SELECT COUNT(*) FROM downloads WHERE NOT downloaded")
+        cur.execute("SELECT COUNT(*) FROM pending")
         (n,) = cur.fetchone()
     finally:
         cur.close()
@@ -119,7 +120,7 @@ async def main():
     async def leader():
         cur = db.cursor()
         try:
-            cur.execute("SELECT id FROM downloads WHERE NOT downloaded")
+            cur.execute("SELECT post_id FROM pending")
 
             pbar = tqdm(cur, total=n)
             for (id,) in pbar:

@@ -27,13 +27,17 @@ def main():
     )
 
     db = sqlite3.connect(args.output_db_path)
-    db.execute(
+    db.executescript(
         """
-    CREATE TABLE IF NOT EXISTS downloads
-        ( id INTEGER PRIMARY KEY
-        , downloaded INTEGER NOT NULL DEFAULT FALSE  -- actually bool
+    CREATE TABLE IF NOT EXISTS pending
+        ( post_id INTEGER NOT NULL
         )
-    STRICT
+    STRICT;
+
+    CREATE TABLE IF NOT EXISTS downloaded
+        ( post_id INTEGER NOT NULL
+        )
+    STRICT;
     """
     )
 
@@ -69,11 +73,8 @@ def main():
             ):
                 continue
 
-            db.execute("""INSERT OR IGNORE INTO downloads(id) VALUES(?)""", [id])
+            db.execute("""INSERT OR IGNORE INTO pending(post_id) VALUES(?)""", [id])
 
-        db.execute(
-            """CREATE INDEX IF NOT EXISTS downloads_downloaded ON downloads(downloaded)"""
-        )
         db.commit()
     finally:
         cur.close()
