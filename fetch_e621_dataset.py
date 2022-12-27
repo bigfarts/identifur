@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import humanfriendly
 import asyncio
 import contextlib
 from tqdm import tqdm
@@ -12,7 +13,12 @@ from identifur.id import split_id, format_split_id
 logging.basicConfig(level=logging.INFO)
 
 
-async def fetch(session, output_path, db, data_db, id, fetch_full_image):
+class Stats:
+    def __init__(self):
+        self.bytes_received = 0
+
+
+async def fetch(session, stats, output_path, db, data_db, id, fetch_full_image):
     fsid = format_split_id(split_id(id))
     try:
         os.makedirs(os.path.join(output_path, *fsid[:-1]))
@@ -59,6 +65,7 @@ async def fetch(session, output_path, db, data_db, id, fetch_full_image):
 
     with open(os.path.join(output_path, *fsid), "wb") as f:
         async for data in resp.content.iter_any():
+            stats.bytes_received += len(data)
             f.write(data)
 
     db.execute("INSERT INTO downloaded(post_id) VALUES(?)", [id])
@@ -66,19 +73,21 @@ async def fetch(session, output_path, db, data_db, id, fetch_full_image):
     db.commit()
 
 
-async def worker(session, output_path, db, data_db, queue, fetch_full_image):
+async def worker(session, stats, output_path, db, data_db, queue, fetch_full_image):
     try:
         while True:
             id = await queue.get()
-            await guarded_fetch(session, output_path, db, data_db, id, fetch_full_image)
+            await guarded_fetch(
+                session, stats, output_path, db, data_db, id, fetch_full_image
+            )
             queue.task_done()
     except asyncio.CancelledError:
         return
 
 
-async def guarded_fetch(session, output_path, db, data_db, id, fetch_full_image):
+async def guarded_fetch(session, stats, output_path, db, data_db, id, fetch_full_image):
     try:
-        await fetch(session, output_path, db, data_db, id, fetch_full_image)
+        await fetch(session, stats, output_path, db, data_db, id, fetch_full_image)
     except Exception:
         logging.exception("failed to download %d", id)
 
@@ -98,11 +107,13 @@ async def main():
         sqlite3.connect(args.dls_db) as db,
         sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as data_db,
     ):
+        stats = Stats()
         async with aiohttp.ClientSession() as session:
             workers = [
                 asyncio.create_task(
                     worker(
                         session,
+                        stats,
                         args.output_path,
                         db,
                         data_db,
@@ -127,6 +138,12 @@ async def main():
 
                     pbar = tqdm(cur, total=n)
                     for (id,) in pbar:
+                        rate = stats.bytes_received / pbar.format_dict["elapsed"]
+                        pbar.set_postfix(
+                            {
+                                "speed": f"{humanfriendly.format_size(rate, binary=True)}/s"
+                            }
+                        )
                         pbar.set_description(f"{id}")
                         await queue.put(id)
 
