@@ -63,10 +63,14 @@ async def fetch(session, stats, output_path, db, data_db, id, fetch_full_image):
 
     resp.raise_for_status()
 
-    with open(os.path.join(output_path, *fsid), "wb") as f:
+    path = os.path.join(output_path, *fsid)
+    incomplete_path = path + ".incomplete"
+
+    with open(incomplete_path, "wb") as f:
         async for data in resp.content.iter_any():
             stats.bytes_received += len(data)
             f.write(data)
+    os.rename(incomplete_path, path)
 
     db.execute("INSERT INTO downloaded(post_id) VALUES(?)", [id])
     db.execute("INSERT INTO visited(post_id) VALUES(?)", [id])

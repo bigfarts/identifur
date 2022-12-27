@@ -1,11 +1,10 @@
 import argparse
 import enum
+import struct
 from tqdm import tqdm
 import os
 import logging
 import contextlib
-import pyarrow as pa
-from pyarrow import dataset
 import sqlite3
 
 logging.basicConfig(level=logging.INFO)
@@ -59,14 +58,7 @@ def main():
         for tag in tags:
             f.write(f"{tag}\n")
 
-    schema = pa.schema(
-        [
-            ("post_id", pa.uint64()),
-            ("labels", pa.list_(pa.bool_(), len(tags))),
-        ]
-    )
-
-    def data_iter():
+    with open(os.path.join(meta_path, "index"), "wb") as f:
         with sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as db:
             db.execute("ATTACH DATABASE ? AS dls", [f"file:{args.dls_db}?mode=ro"])
 
@@ -82,24 +74,10 @@ def main():
                     post_tags = set(tag_string.split(" "))
                     post_tags.add(f"rating: {rating}")
 
-                    yield pa.RecordBatch.from_pylist(
-                        [
-                            {
-                                "post_id": id,
-                                "labels": [
-                                    True if tag in post_tags else False for tag in tags
-                                ],
-                            }
-                        ],
-                        schema=schema,
+                    f.write(
+                        struct.pack("Q", id)
+                        + bytes(True if tag in post_tags else False for tag in tags)
                     )
-
-    dataset.write_dataset(
-        data_iter(),
-        os.path.join(meta_path, "table"),
-        format="feather",
-        schema=schema,
-    )
 
 
 if __name__ == "__main__":

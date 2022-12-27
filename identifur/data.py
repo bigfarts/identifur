@@ -1,5 +1,6 @@
-from pyarrow import dataset
 import logging
+import struct
+import mmap
 import torch
 from torch import nn
 import os
@@ -19,27 +20,47 @@ class E621Dataset(Dataset):
     def __init__(self, dataset_path="dataset"):
         self.dataset_path = dataset_path
         self.tags = load_tags(dataset_path)
-        self.table = dataset.dataset(
-            os.path.join(dataset_path, "_meta", "table"), format="feather"
-        ).to_table()
+        self.index_file = open(os.path.join(dataset_path, "_meta", "index"), "rb")
+        self.index = mmap.mmap(
+            self.index_file.fileno(), 0, mmap.MAP_PRIVATE, mmap.PROT_READ
+        )
+        self.record_size = struct.calcsize("Q") + len(self.tags)
 
-    def __len__(self):
-        return self.table.num_rows
+    def id_for_index(self, index):
+        offset = index * self.record_size
+        (id,) = struct.unpack("Q", self.index[offset : offset + struct.calcsize("Q")])
+        return id
 
-    def __getitem__(self, index):
-        fsid = format_split_id(split_id(self.table[0][index].as_py()))
+    def labels_for_index(self, index):
+        offset = index * self.record_size
+        return torch.tensor(
+            [
+                x == True
+                for x in self.index[
+                    offset
+                    + struct.calcsize("Q") : offset
+                    + struct.calcsize("Q")
+                    + len(self.tags)
+                ]
+            ],
+            dtype=torch.float32,
+        )
 
-        img = Image.open(
+    def image_for_id(self, id):
+        fsid = format_split_id(split_id(id))
+        return Image.open(
             os.path.join(self.dataset_path, *fsid),
             formats=["JPEG", "PNG"],
         ).convert("RGB")
 
+    def __len__(self):
+        return self.index.size() // self._get_record_size()
+
+    def __getitem__(self, index):
+        id = self.id_for_index(index)
         return (
-            transforms.ToTensor()(img),
-            torch.tensor(
-                [v.as_py() for v in self.table[1][index]],
-                dtype=torch.float32,
-            ),
+            transforms.ToTensor()(self.image_for_id(id)),
+            self.labels_for_index(index),
         )
 
 
