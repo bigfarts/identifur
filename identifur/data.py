@@ -27,8 +27,10 @@ def split_id(id, depth=3, factor=1000):
     return tuple(reversed(parts))
 
 
-def format_id(sid):
-    return tuple(f"{p:03}" for p in sid)
+def format_split_id(sid):
+    parts = [f"{p:03}" for p in sid]
+    parts[-1] = "".join(parts)
+    return parts
 
 
 def load_tags(db, min_post_count):
@@ -59,9 +61,9 @@ class E621Dataset(Dataset):
     def __getitem__(self, index):
         id = self.post_ids[index]
 
-        fsid = format_id(split_id(id))
+        fsid = format_split_id(split_id(id))
         img = Image.open(
-            os.path.join(self.dataset_path, *fsid[:-1], "".join(fsid)),
+            os.path.join(self.dataset_path, *fsid),
             formats=["JPEG", "PNG"],
         )
 

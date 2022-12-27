@@ -7,13 +7,13 @@ import logging
 import aiohttp
 import sqlite3
 import os
-from identifur.data import split_id, format_id
+from identifur.data import split_id, format_split_id
 
 logging.basicConfig(level=logging.INFO)
 
 
 async def fetch(output_path, db, data_db, id, fetch_full_image):
-    fsid = format_id(split_id(id))
+    fsid = format_split_id(split_id(id))
     try:
         os.makedirs(os.path.join(output_path, *fsid[:-1]))
     except FileExistsError:
@@ -52,18 +52,18 @@ async def fetch(output_path, db, data_db, id, fetch_full_image):
 
         if resp.status == 404:
             logging.warn("%d not found, skipping", id)
-            db.execute("DELETE FROM pending WHERE post_id = ?", [id])
+            db.execute("INSERT INTO visited(post_id) VALUES(?)", [id])
             db.commit()
             return
 
         resp.raise_for_status()
 
-        with open(os.path.join(output_path, *fsid[:-1], "".join(fsid)), "wb") as f:
+        with open(os.path.join(output_path, *fsid), "wb") as f:
             async for data in resp.content.iter_any():
                 f.write(data)
 
         db.execute("INSERT INTO downloaded(post_id) VALUES(?)", [id])
-        db.execute("DELETE FROM pending WHERE post_id = ?", [id])
+        db.execute("INSERT INTO visited(post_id) VALUES(?)", [id])
         db.commit()
 
 
@@ -108,11 +108,15 @@ async def main():
 
         async def leader():
             with contextlib.closing(db.cursor()) as cur:
-                cur.execute("SELECT COUNT(*) FROM pending")
+                cur.execute(
+                    "SELECT (SELECT COUNT(*) FROM selected) - (SELECT COUNT(*) FROM visited)"
+                )
                 (n,) = cur.fetchone()
 
             with contextlib.closing(db.cursor()) as cur:
-                cur.execute("SELECT post_id FROM pending")
+                cur.execute(
+                    "SELECT selected.post_id FROM selected LEFT JOIN visited ON selected.post_id = visited.post_id WHERE visited.post_id IS NULL"
+                )
 
                 pbar = tqdm(cur, total=n)
                 for (id,) in pbar:

@@ -33,13 +33,18 @@ def main():
     ):
         db.executescript(
             """
-        CREATE TABLE IF NOT EXISTS pending
-            ( post_id INTEGER NOT NULL
+        CREATE TABLE IF NOT EXISTS selected
+            ( post_id INTEGER PRIMARY KEY
+            )
+        STRICT;
+
+        CREATE TABLE IF NOT EXISTS visited
+            ( post_id INTEGER PRIMARY KEY
             )
         STRICT;
 
         CREATE TABLE IF NOT EXISTS downloaded
-            ( post_id INTEGER NOT NULL
+            ( post_id INTEGER PRIMARY KEY
             )
         STRICT;
         """
@@ -71,7 +76,9 @@ def main():
                 ):
                     continue
 
-                db.execute("""INSERT OR IGNORE INTO pending(post_id) VALUES(?)""", [id])
+                db.execute(
+                    """INSERT OR IGNORE INTO selected(post_id) VALUES(?)""", [id]
+                )
 
 
 if __name__ == "__main__":
