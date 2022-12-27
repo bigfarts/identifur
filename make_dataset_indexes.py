@@ -68,7 +68,7 @@ def main():
 
             with contextlib.closing(db.cursor()) as cur:
                 cur.execute(
-                    "SELECT id, tag_string, rating FROM posts INNER JOIN dls.downloaded ON dls.downloaded.post_id = posts.id"
+                    "SELECT posts.id, posts.tag_string, posts.rating FROM dls.downloaded INNER JOIN posts ON dls.downloaded.post_id = posts.id"
                 )
                 for id, tag_string, rating in tqdm(cur, total=n):
                     post_tags = set(tag_string.split(" "))
