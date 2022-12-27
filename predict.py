@@ -16,7 +16,7 @@ def main():
     argparser.add_argument("--dataset-path", default="dataset")
     args = argparser.parse_args()
 
-    tags = load_tags(args.dataset_path)
+    tags = list(load_tags(args.dataset_path))
 
     device = torch.device("cuda")
 

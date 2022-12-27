@@ -24,7 +24,7 @@ def main():
 
     model, input_size = models.MODELS[args.base_model]
 
-    tags = load_tags(args.dataset_path)
+    tags = list(load_tags(args.dataset_path))
     dm = E621DataModule(
         dataset_path=args.dataset_path,
         batch_size=args.batch_size,

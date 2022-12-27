@@ -1,3 +1,4 @@
+import functools
 import logging
 import struct
 import mmap
@@ -13,38 +14,48 @@ from .id import format_split_id, split_id
 
 def load_tags(dataset_path):
     with open(os.path.join(dataset_path, "_meta", "tags"), "rt", encoding="utf-8") as f:
-        return [line.rstrip("\n") for line in f]
+        for line in f:
+            yield line.rstrip("\n")
+
+
+class Index:
+    def __init__(self, dataset_path):
+        self.file = open(os.path.join(dataset_path, "_meta", "index"), "rb")
+        self.num_tags = sum(1 for _ in load_tags(dataset_path))
+        self.mmap = mmap.mmap(self.file.fileno(), 0, mmap.MAP_PRIVATE, mmap.PROT_READ)
+
+    @property
+    def _record_size(self):
+        return struct.calcsize("Q") + self.num_tags
+
+    def __len__(self):
+        return self.mmap.size() // self._record_size
+
+    def __getitem__(self, i):
+        record_size = struct.calcsize("Q") + self.num_tags
+        offset = i * record_size
+        (id,) = struct.unpack("Q", self.mmap[offset : offset + struct.calcsize("Q")])
+        return id, torch.tensor(
+            [
+                x == True
+                for x in self.mmap[
+                    offset
+                    + struct.calcsize("Q") : offset
+                    + struct.calcsize("Q")
+                    + self.num_tags
+                ]
+            ],
+            dtype=torch.float32,
+        )
 
 
 class E621Dataset(Dataset):
     def __init__(self, dataset_path="dataset"):
         self.dataset_path = dataset_path
-        self.tags = load_tags(dataset_path)
-        self.index_file = open(os.path.join(dataset_path, "_meta", "index"), "rb")
-        self.index = mmap.mmap(
-            self.index_file.fileno(), 0, mmap.MAP_PRIVATE, mmap.PROT_READ
-        )
-        self.record_size = struct.calcsize("Q") + len(self.tags)
 
-    def id_for_index(self, index):
-        offset = index * self.record_size
-        (id,) = struct.unpack("Q", self.index[offset : offset + struct.calcsize("Q")])
-        return id
-
-    def labels_for_index(self, index):
-        offset = index * self.record_size
-        return torch.tensor(
-            [
-                x == True
-                for x in self.index[
-                    offset
-                    + struct.calcsize("Q") : offset
-                    + struct.calcsize("Q")
-                    + len(self.tags)
-                ]
-            ],
-            dtype=torch.float32,
-        )
+    @functools.cached_property
+    def _index(self):
+        return Index(self.dataset_path)
 
     def image_for_id(self, id):
         fsid = format_split_id(split_id(id))
@@ -54,13 +65,13 @@ class E621Dataset(Dataset):
         ).convert("RGB")
 
     def __len__(self):
-        return self.index.size() // self._get_record_size()
+        return len(self._index)
 
-    def __getitem__(self, index):
-        id = self.id_for_index(index)
+    def __getitem__(self, i):
+        id, labels = self._index[i]
         return (
             transforms.ToTensor()(self.image_for_id(id)),
-            self.labels_for_index(index),
+            labels,
         )
 
 

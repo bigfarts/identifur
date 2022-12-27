@@ -45,7 +45,7 @@ def main():
     args = argparser.parse_args()
 
     db = sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True)
-    tags = load_tags(db, args.tag_min_post_count)
+    tags = list(load_tags(db, args.tag_min_post_count))
     logging.info("loaded %d tags", len(tags))
 
     meta_path = os.path.join(args.dataset_path, "_meta")
