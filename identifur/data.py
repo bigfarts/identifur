@@ -26,7 +26,7 @@ def format_split_id(sid):
 
 
 def load_tags(dataset_path):
-    with open(os.path.join(dataset_path, "_tags"), "rt", encoding="utf-8") as f:
+    with open(os.path.join(dataset_path, "_meta", "tags"), "rt", encoding="utf-8") as f:
         return [line.rstrip("\n") for line in f]
 
 
@@ -35,7 +35,7 @@ class E621Dataset(Dataset):
         self.dataset_path = dataset_path
         self.tags = load_tags(dataset_path)
         self.table = dataset.dataset(
-            os.path.join(dataset_path, "_posts"), format="arrow"
+            os.path.join(dataset_path, "_meta", "table"), format="arrow"
         ).to_table()
 
     def __len__(self):

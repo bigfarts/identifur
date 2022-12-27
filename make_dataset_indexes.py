@@ -49,7 +49,13 @@ def main():
         tags = load_tags(db, args.tag_min_post_count)
         logging.info("loaded %d tags", len(tags))
 
-    with open(os.path.join(args.dataset_path, "_tags"), "wt", encoding="utf-8") as f:
+    meta_path = os.path.join(args.dataset_path, "_meta")
+    try:
+        os.makedirs(meta_path)
+    except FileExistsError:
+        pass
+
+    with open(os.path.join(meta_path, "tags"), "wt", encoding="utf-8") as f:
         for tag in tags:
             f.write(f"{tag}\n")
 
@@ -86,7 +92,7 @@ def main():
 
     dataset.write_dataset(
         data_iter(),
-        os.path.join(args.dataset_path, "_posts"),
+        os.path.join(meta_path, "table"),
         format="arrow",
         schema=schema,
     )

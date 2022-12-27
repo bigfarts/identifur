@@ -64,8 +64,7 @@ def fetch_posts(db, date):
     req.raise_for_status()
 
     with gzip.open(req.raw, "rt", encoding="utf-8") as f:
-        csvr = csv.DictReader(f)
-        for row in tqdm(csvr, desc="posts"):
+        for row in tqdm(csv.DictReader(f), desc="posts"):
             id = int(row["id"])
             uploader_id = int(row["uploader_id"])
             created_at = row["created_at"]
@@ -200,8 +199,7 @@ def fetch_tags(db, date):
     req.raise_for_status()
 
     with gzip.open(req.raw, "rt", encoding="utf-8") as f:
-        csvr = csv.DictReader(f)
-        for row in tqdm(csvr, desc="tags"):
+        for row in tqdm(csv.DictReader(f), desc="tags"):
             id = int(row["id"])
             name = row["name"]
             post_count = int(row["post_count"])

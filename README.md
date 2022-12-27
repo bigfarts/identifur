@@ -30,10 +30,18 @@ python3 fetch_e621_dataset.py data-$DATE.db
 
 this will start populating the `dataset` directory. you can interrupt and restart the script at any time: current status is saved to `dls.db`.
 
+### 4. generating metadata
+
+```sh
+python3 make_dataset_indexes.py data-$DATE.db
+```
+
+this will add metadata to the dataset (tags, posts).
+
 ## training the model
 
 ```sh
-python3 train.py data-$DATE.db
+python3 train.py
 ```
 
 then wait forever for it to finish.
@@ -41,7 +49,7 @@ then wait forever for it to finish.
 ## testing the model
 
 ```sh
-python3 test.py data-$DATE.db models/best/$MODEL.pt image.jpg
+python3 predict.py models/version_0/checkpoints/epoch=10-*.ckpt image.jpg
 ```
 
 maybe the model works idk lol

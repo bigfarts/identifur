@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
 import numpy as np
-import os
 import argparse
 from PIL import Image
 import torch
 from torchvision import transforms
 from identifur import models
 from identifur.data import load_tags
-import pytorch_lightning as pl
 
 
 def main():
     argparser = argparse.ArgumentParser()
-    argparser.add_argument("data_db")
     argparser.add_argument("checkpoint")
     argparser.add_argument("sample")
     argparser.add_argument("--base-model", default="vit_l_16")
