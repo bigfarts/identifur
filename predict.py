@@ -34,18 +34,20 @@ def main():
     model.eval()
 
     with torch.no_grad():
-        outputs = model(
+        y_pred = model(
             transforms.ToTensor()(
                 transforms.Resize(input_size)(Image.open(args.sample).convert("RGB"))
             )
             .unsqueeze(0)
             .to(device),
         )
-        outputs = torch.sigmoid(outputs)
-        outputs = outputs.detach().cpu()
-        sorted_indices = list(reversed(np.argsort(outputs[0])))
+        y_pred = torch.sigmoid(y_pred)
+        y_pred = y_pred.detach().cpu()
+        y_pred = y_pred[0]
+
+        sorted_indices = list(reversed(np.argsort(y_pred)))
         for i in sorted_indices[:10]:
-            print(tags[i], outputs[0][i].item())
+            print(tags[i], y_pred[i].item())
 
 
 if __name__ == "__main__":
