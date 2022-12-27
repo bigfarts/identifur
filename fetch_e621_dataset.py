@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+import contextlib
 from tqdm import tqdm
 import logging
 import aiohttp
@@ -18,12 +19,9 @@ async def fetch(output_path, db, data_db, id, fetch_full_image):
     except FileExistsError:
         pass
 
-    cur = data_db.cursor()
-    try:
+    with contextlib.closing(data_db.cursor()) as cur:
         cur.execute("SELECT md5, file_ext FROM posts WHERE id = ?", [id])
         row = cur.fetchone()
-    finally:
-        cur.close()
 
     if row is None:
         return
@@ -46,7 +44,6 @@ async def fetch(output_path, db, data_db, id, fetch_full_image):
                 resp = None
             else:
                 resp.raise_for_status()
-                file_ext = "jpg"
 
         if resp is None:
             resp = await session.get(
@@ -61,9 +58,7 @@ async def fetch(output_path, db, data_db, id, fetch_full_image):
 
         resp.raise_for_status()
 
-        with open(
-            os.path.join(output_path, *fsid[:-1], f"{fsid[-1]}.{file_ext}"), "wb"
-        ) as f:
+        with open(os.path.join(output_path, *fsid[:-1], "".join(fsid)), "wb") as f:
             async for data in resp.content.iter_any():
                 f.write(data)
 
@@ -100,40 +95,36 @@ async def main():
 
     queue = asyncio.Queue(args.num_workers)
 
-    db = sqlite3.connect(args.dls_db)
-    data_db = sqlite3.connect(args.data_db)
+    with (
+        sqlite3.connect(args.dls_db) as db,
+        sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as data_db,
+    ):
+        workers = [
+            asyncio.create_task(
+                worker(args.output_path, db, data_db, queue, args.fetch_full_image)
+            )
+            for _ in range(args.num_workers)
+        ]
 
-    workers = [
-        asyncio.create_task(
-            worker(args.output_path, db, data_db, queue, args.fetch_full_image)
-        )
-        for _ in range(args.num_workers)
-    ]
+        async def leader():
+            with contextlib.closing(db.cursor()) as cur:
+                cur.execute("SELECT COUNT(*) FROM pending")
+                (n,) = cur.fetchone()
 
-    cur = db.cursor()
-    try:
-        cur.execute("SELECT COUNT(*) FROM pending")
-        (n,) = cur.fetchone()
-    finally:
-        cur.close()
+            with contextlib.closing(db.cursor()) as cur:
+                cur.execute("SELECT post_id FROM pending")
 
-    async def leader():
-        cur = db.cursor()
-        try:
-            cur.execute("SELECT post_id FROM pending")
+                pbar = tqdm(cur, total=n)
+                for (id,) in pbar:
+                    pbar.set_description(f"{id}")
+                    await queue.put(id)
 
-            pbar = tqdm(cur, total=n)
-            for (id,) in pbar:
-                pbar.set_description(f"{id}")
-                await queue.put(id)
-        finally:
-            cur.close()
-        await queue.join()
+            await queue.join()
 
-        for worker in workers:
-            worker.cancel()
+            for worker in workers:
+                worker.cancel()
 
-    await asyncio.gather(*([leader()] + workers))
+        await asyncio.gather(*([leader()] + workers))
 
 
 if __name__ == "__main__":

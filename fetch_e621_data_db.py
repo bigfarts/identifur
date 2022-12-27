@@ -223,11 +223,10 @@ def main():
     if output_path is None:
         output_path = f"data-{args.date}.db"
 
-    db = sqlite3.connect(output_path)
-    init_db(db)
-    fetch_posts(db, args.date)
-    fetch_tags(db, args.date)
-    db.commit()
+    with sqlite3.connect(output_path) as db:
+        init_db(db)
+        fetch_posts(db, args.date)
+        fetch_tags(db, args.date)
 
 
 if __name__ == "__main__":

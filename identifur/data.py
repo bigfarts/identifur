@@ -1,4 +1,5 @@
 import enum
+import contextlib
 import torch
 import os
 from torch.utils.data import Dataset
@@ -31,8 +32,7 @@ def format_id(sid):
 
 
 def load_tags(db, min_post_count):
-    cur = db.cursor()
-    try:
+    with contextlib.closing(db.cursor()) as cur:
         cur.execute(
             "SELECT name FROM tags WHERE post_count >= ? AND category IN (?, ?, ?, ?)",
             [
@@ -44,58 +44,30 @@ def load_tags(db, min_post_count):
             ],
         )
         return [name for name, in cur] + [f"rating: {r}" for r in "sqe"]
-    finally:
-        cur.close()
 
 
 class E621Dataset(Dataset):
-    def __init__(self, dls_db, db, tags, dataset_path="dataset"):
-        self.dls_db = dls_db
+    def __init__(self, post_ids, db, tags, dataset_path="dataset"):
+        self.post_ids = post_ids
         self.db = db
         self.tags = tags
         self.dataset_path = dataset_path
 
-        cur = self.dls_db.cursor()
-        try:
-            cur.execute("SELECT MAX(rowid) FROM downloaded")
-            (self.n,) = cur.fetchone()
-        finally:
-            cur.close()
-
     def __len__(self):
-        return self.n
+        return len(self.post_ids)
 
     def __getitem__(self, index):
-        if index >= self.n:
-            raise IndexError
+        id = self.post_ids[index]
 
-        cur = self.dls_db.cursor()
-        try:
-            cur.execute("SELECT post_id FROM downloaded WHERE rowid = ?", [index + 1])
-            (id,) = cur.fetchone()
-        finally:
-            cur.close()
-
-        img = None
         fsid = format_id(split_id(id))
-        for ext in (".jpg", ".png"):
-            path = os.path.join(self.dataset_path, *fsid[:-1], fsid[-1] + ext)
-            try:
-                f = open(path, "rb")
-            except FileNotFoundError:
-                continue
+        img = Image.open(
+            os.path.join(self.dataset_path, *fsid[:-1], "".join(fsid)),
+            formats=["JPEG", "PNG"],
+        )
 
-            img = Image.open(f)
-
-        if img is None:
-            raise FileNotFoundError("image not found")
-
-        cur = self.db.cursor()
-        try:
+        with contextlib.closing(self.db.cursor()) as cur:
             cur.execute("SELECT tag_string, rating FROM posts WHERE id = ?", [id])
             (tag_string, rating) = cur.fetchone()
-        finally:
-            cur.close()
 
         tags = set(tag_string.split(" "))
         tags.add(f"rating: {rating}")

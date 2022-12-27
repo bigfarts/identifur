@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import contextlib
 import logging
 import csv
 import sqlite3
@@ -26,58 +27,51 @@ def main():
         args.blacklisted_tags.split(",") if args.blacklisted_tags else []
     )
 
-    db = sqlite3.connect(args.output_db_path)
-    db.executescript(
+    with (
+        sqlite3.connect(args.output_db_path) as db,
+        sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as data_db,
+    ):
+        db.executescript(
+            """
+        CREATE TABLE IF NOT EXISTS pending
+            ( post_id INTEGER NOT NULL
+            )
+        STRICT;
+
+        CREATE TABLE IF NOT EXISTS downloaded
+            ( post_id INTEGER NOT NULL
+            )
+        STRICT;
         """
-    CREATE TABLE IF NOT EXISTS pending
-        ( post_id INTEGER NOT NULL
         )
-    STRICT;
 
-    CREATE TABLE IF NOT EXISTS downloaded
-        ( post_id INTEGER NOT NULL
+        allowed_ratings = RATINGS[: RATINGS.index(args.maximum_rating) + 1]
+
+        logging.info(
+            "making dls db\nblacklisted tags: %s\nminimum score: %d\nminimum tag count: %d\nallowed ratings: %s",
+            blacklisted_tags,
+            args.minimum_score,
+            args.minimum_tag_count,
+            allowed_ratings,
         )
-    STRICT;
-    """
-    )
 
-    data_db = sqlite3.connect(args.data_db)
+        with contextlib.closing(data_db.cursor()) as cur:
+            cur.execute("SELECT COUNT(*) FROM posts")
+            (n,) = cur.fetchone()
 
-    allowed_ratings = RATINGS[: RATINGS.index(args.maximum_rating) + 1]
+        with contextlib.closing(data_db.cursor()) as cur:
+            cur.execute(
+                "SELECT id, tag_string FROM posts WHERE NOT is_deleted AND NOT is_pending AND score >= ? AND INSTR(?, rating)",
+                [args.minimum_score, allowed_ratings],
+            )
+            for id, tag_string in tqdm(cur, total=n):
+                tags = tag_string.split(" ")
+                if len(tags) < args.minimum_tag_count or any(
+                    tag in blacklisted_tags for tag in tags
+                ):
+                    continue
 
-    logging.info(
-        "making dls db\nblacklisted tags: %s\nminimum score: %d\nminimum tag count: %d\nallowed ratings: %s",
-        blacklisted_tags,
-        args.minimum_score,
-        args.minimum_tag_count,
-        allowed_ratings,
-    )
-
-    cur = data_db.cursor()
-    try:
-        cur.execute("SELECT COUNT(*) FROM posts")
-        (n,) = cur.fetchone()
-    finally:
-        cur.close()
-
-    cur = data_db.cursor()
-    try:
-        cur.execute(
-            "SELECT id, tag_string FROM posts WHERE NOT is_deleted AND NOT is_pending AND score >= ? AND INSTR(?, rating)",
-            [args.minimum_score, allowed_ratings],
-        )
-        for id, tag_string in tqdm(cur, total=n):
-            tags = tag_string.split(" ")
-            if len(tags) < args.minimum_tag_count or any(
-                tag in blacklisted_tags for tag in tags
-            ):
-                continue
-
-            db.execute("""INSERT OR IGNORE INTO pending(post_id) VALUES(?)""", [id])
-
-        db.commit()
-    finally:
-        cur.close()
+                db.execute("""INSERT OR IGNORE INTO pending(post_id) VALUES(?)""", [id])
 
 
 if __name__ == "__main__":

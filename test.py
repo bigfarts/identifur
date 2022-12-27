@@ -19,8 +19,9 @@ def main():
     argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     args = argparser.parse_args()
 
-    db = sqlite3.connect(args.data_db)
-    tags = load_tags(db, args.tag_min_post_count)
+    with sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as db:
+        tags = load_tags(db, args.tag_min_post_count)
+
     device = torch.device("cuda")
 
     checkpoint = torch.load(args.checkpoint, map_location=device)

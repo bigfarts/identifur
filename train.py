@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import contextlib
 import torch
 import sqlite3
 import logging
@@ -37,7 +38,7 @@ class SafeDataset(Dataset):
     def __getitem__(self, index):
         while True:
             try:
-                return self[index]
+                return self.ds[index]
             except Exception:
                 logging.exception("failed to open %d, will pick next one", index)
             index = (index + 1) % len(self)
@@ -82,178 +83,181 @@ def main():
     )
     args = argparser.parse_args()
 
-    db = sqlite3.connect(args.data_db)
-    dls_db = sqlite3.connect(args.dls_db)
+    with sqlite3.connect(f"file:{args.dls_db}?mode=ro", uri=True) as dls_db:
+        with contextlib.closing(dls_db.cursor()) as cur:
+            cur.execute("SELECT post_id FROM downloaded")
+            post_ids = [post_id for post_id, in cur]
+    logging.info("loaded %d post IDs", len(post_ids))
 
-    logging.info("vacuuming dls db to make rowids contiguous...")
-    dls_db.execute("VACUUM")
-    logging.info("done!")
+    with sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as db:
+        tags = load_tags(db, args.tag_min_post_count)
+        logging.info("loaded %d tags", len(tags))
 
-    tags = load_tags(db, args.tag_min_post_count)
+        device = torch.device("cuda")
 
-    logging.info("loaded %d tags", len(tags))
-
-    device = torch.device("cuda")
-
-    model, input_size = models.MODELS[args.base_model]
-    model = model(pretrained=True, requires_grad=False, num_classes=len(tags)).to(
-        device
-    )
-
-    optimizer = optim.Adam(
-        model.parameters(),
-        lr=0.0001 if args.learning_rate is None else args.learning_rate,
-    )
-    criterion = nn.BCEWithLogitsLoss()
-
-    ds = SafeDataset(E621Dataset(dls_db, db, tags, args.dataset_path))
-
-    train_data, val_data, test_data = random_split(
-        ds,
-        [args.train_data_split, args.validation_data_split, args.test_data_split],
-        generator=torch.Generator().manual_seed(args.random_split_seed),
-    )
-
-    train_loader = DataLoader(
-        TransformingDataset(
-            train_data,
-            transforms.Compose(
-                [
-                    transforms.Resize(input_size),
-                    transforms.RandomHorizontalFlip(p=0.5),
-                    transforms.RandomRotation(degrees=45),
-                    transforms.ToTensor(),
-                ]
-            ),
-        ),
-        batch_size=args.batch_size,
-        shuffle=True,
-    )
-
-    to_save = {"model": model, "optimizer": optimizer}
-
-    trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
-    ProgressBar().attach(trainer)
-
-    if args.learning_rate is None:
-        logging.info("no learning rate specified, will try to find one")
-        lr_finder = FastaiLRFinder()
-        with lr_finder.attach(trainer, to_save, end_lr=1e-02) as trainer_with_lr_finder:
-            trainer_with_lr_finder.run(train_loader)
-        logging.info(
-            "LR finder logs: %s, suggested LR: %.8f",
-            lr_finder.get_results(),
-            lr_finder.lr_suggestion(),
-        )
-        lr_finder.apply_suggested_lr(optimizer)
-
-    val_loader = DataLoader(
-        TransformingDataset(
-            val_data,
-            transforms.Compose(
-                [
-                    transforms.Resize((224, 224)),
-                    transforms.ToTensor(),
-                ]
-            ),
-        ),
-        batch_size=args.batch_size,
-        shuffle=False,
-    )
-
-    trainer.add_event_handler(
-        Events.ITERATION_COMPLETED(every=args.trainer_iteration_checkpoint_intervals),
-        Checkpoint(
-            to_save,
-            DiskSaver(
-                "models/current_iteration",
-                require_empty=not args.allow_checkpoints_dir_empty,
-            ),
-            n_saved=2,
-        ),
-    )
-    trainer.add_event_handler(
-        Events.EPOCH_COMPLETED,
-        Checkpoint(
-            to_save,
-            DiskSaver(
-                "models/epoch",
-                require_empty=not args.allow_checkpoints_dir_empty,
-            ),
-            n_saved=2,
-            global_step_transform=lambda *_: trainer.state.epoch,
-        ),
-    )
-
-    @trainer.on(Events.ITERATION_COMPLETED(every=args.trainer_log_interval))
-    def log_training_loss(trainer):
-        logging.info(
-            "Epoch[%d], Iter[%d] Loss: %.2f",
-            trainer.state.epoch,
-            trainer.state.iteration,
-            trainer.state.output,
+        model, input_size = models.MODELS[args.base_model]
+        model = model(pretrained=True, requires_grad=False, num_classes=len(tags)).to(
+            device
         )
 
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def log_training_results(trainer):
-        train_evaluator.run(train_loader)
-        metrics = train_evaluator.state.metrics
-        logging.info(
-            "Training Results - Epoch[%d] Avg accuracy: %.2f Avg loss: %.2f",
-            trainer.state.epoch,
-            metrics["accuracy"],
-            metrics["loss"],
+        optimizer = optim.Adam(
+            model.parameters(),
+            lr=0.0001 if args.learning_rate is None else args.learning_rate,
+        )
+        criterion = nn.BCEWithLogitsLoss()
+
+        ds = SafeDataset(E621Dataset(post_ids, db, tags, args.dataset_path))
+
+        train_data, val_data, test_data = random_split(
+            ds,
+            [args.train_data_split, args.validation_data_split, args.test_data_split],
+            generator=torch.Generator().manual_seed(args.random_split_seed),
         )
 
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def log_validation_results(trainer):
-        val_evaluator.run(val_loader)
-        metrics = val_evaluator.state.metrics
-        logging.info(
-            "Validation Results - Epoch[%d] Avg accuracy: %.2f Avg loss: %.2f",
-            trainer.state.epoch,
-            metrics["accuracy"],
-            metrics["loss"],
-        )
-
-    def thresholded_output_transform(output):
-        y_pred, y = output
-        y_pred = torch.sigmoid(y_pred)
-        y_pred = torch.round(y_pred)
-        return y_pred, y
-
-    val_metrics = {
-        "accuracy": Accuracy(
-            is_multilabel=True, output_transform=thresholded_output_transform
-        ),
-        "loss": Loss(criterion),
-    }
-
-    train_evaluator = create_supervised_evaluator(
-        model, metrics=val_metrics, device=device
-    )
-    ProgressBar().attach(train_evaluator)
-
-    val_evaluator = create_supervised_evaluator(
-        model, metrics=val_metrics, device=device
-    )
-    ProgressBar().attach(val_evaluator)
-    val_evaluator.add_event_handler(
-        Events.COMPLETED,
-        Checkpoint(
-            to_save,
-            DiskSaver(
-                "models/best",
-                require_empty=not args.allow_checkpoints_dir_empty,
+        train_loader = DataLoader(
+            TransformingDataset(
+                train_data,
+                transforms.Compose(
+                    [
+                        transforms.Resize(input_size),
+                        transforms.RandomHorizontalFlip(p=0.5),
+                        transforms.RandomRotation(degrees=45),
+                        transforms.ToTensor(),
+                    ]
+                ),
             ),
-            n_saved=2,
-            filename_prefix="best",
-            score_name="accuracy",
-            global_step_transform=global_step_from_engine(trainer),
-        ),
-    )
+            batch_size=args.batch_size,
+            shuffle=True,
+        )
 
-    trainer.run(train_loader, max_epochs=args.max_epochs)
+        to_save = {"model": model, "optimizer": optimizer}
+
+        trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
+        ProgressBar().attach(trainer)
+
+        if args.learning_rate is None:
+            logging.info("no learning rate specified, will try to find one")
+            lr_finder = FastaiLRFinder()
+            with lr_finder.attach(
+                trainer, to_save, end_lr=1e-02
+            ) as trainer_with_lr_finder:
+                trainer_with_lr_finder.run(train_loader)
+            logging.info(
+                "LR finder logs: %s, suggested LR: %.8f",
+                lr_finder.get_results(),
+                lr_finder.lr_suggestion(),
+            )
+            lr_finder.apply_suggested_lr(optimizer)
+
+        val_loader = DataLoader(
+            TransformingDataset(
+                val_data,
+                transforms.Compose(
+                    [
+                        transforms.Resize((224, 224)),
+                        transforms.ToTensor(),
+                    ]
+                ),
+            ),
+            batch_size=args.batch_size,
+            shuffle=False,
+        )
+
+        trainer.add_event_handler(
+            Events.ITERATION_COMPLETED(
+                every=args.trainer_iteration_checkpoint_intervals
+            ),
+            Checkpoint(
+                to_save,
+                DiskSaver(
+                    "models/current_iteration",
+                    require_empty=not args.allow_checkpoints_dir_empty,
+                ),
+                n_saved=2,
+            ),
+        )
+        trainer.add_event_handler(
+            Events.EPOCH_COMPLETED,
+            Checkpoint(
+                to_save,
+                DiskSaver(
+                    "models/epoch",
+                    require_empty=not args.allow_checkpoints_dir_empty,
+                ),
+                n_saved=2,
+                global_step_transform=lambda *_: trainer.state.epoch,
+            ),
+        )
+
+        @trainer.on(Events.ITERATION_COMPLETED(every=args.trainer_log_interval))
+        def log_training_loss(trainer):
+            logging.info(
+                "Epoch[%d], Iter[%d] Loss: %.2f",
+                trainer.state.epoch,
+                trainer.state.iteration,
+                trainer.state.output,
+            )
+
+        @trainer.on(Events.EPOCH_COMPLETED)
+        def log_training_results(trainer):
+            train_evaluator.run(train_loader)
+            metrics = train_evaluator.state.metrics
+            logging.info(
+                "Training Results - Epoch[%d] Avg accuracy: %.2f Avg loss: %.2f",
+                trainer.state.epoch,
+                metrics["accuracy"],
+                metrics["loss"],
+            )
+
+        @trainer.on(Events.EPOCH_COMPLETED)
+        def log_validation_results(trainer):
+            val_evaluator.run(val_loader)
+            metrics = val_evaluator.state.metrics
+            logging.info(
+                "Validation Results - Epoch[%d] Avg accuracy: %.2f Avg loss: %.2f",
+                trainer.state.epoch,
+                metrics["accuracy"],
+                metrics["loss"],
+            )
+
+        def thresholded_output_transform(output):
+            y_pred, y = output
+            y_pred = torch.sigmoid(y_pred)
+            y_pred = torch.round(y_pred)
+            return y_pred, y
+
+        val_metrics = {
+            "accuracy": Accuracy(
+                is_multilabel=True, output_transform=thresholded_output_transform
+            ),
+            "loss": Loss(criterion),
+        }
+
+        train_evaluator = create_supervised_evaluator(
+            model, metrics=val_metrics, device=device
+        )
+        ProgressBar().attach(train_evaluator)
+
+        val_evaluator = create_supervised_evaluator(
+            model, metrics=val_metrics, device=device
+        )
+        ProgressBar().attach(val_evaluator)
+        val_evaluator.add_event_handler(
+            Events.COMPLETED,
+            Checkpoint(
+                to_save,
+                DiskSaver(
+                    "models/best",
+                    require_empty=not args.allow_checkpoints_dir_empty,
+                ),
+                n_saved=2,
+                filename_prefix="best",
+                score_name="accuracy",
+                global_step_transform=global_step_from_engine(trainer),
+            ),
+        )
+
+        trainer.run(train_loader, max_epochs=args.max_epochs)
 
 
 if __name__ == "__main__":
