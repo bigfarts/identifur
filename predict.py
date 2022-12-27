@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
+import os
 import argparse
-import sqlite3
 from PIL import Image
 import torch
 from torchvision import transforms
@@ -17,11 +17,9 @@ def main():
     argparser.add_argument("sample")
     argparser.add_argument("--base-model", default="vit_l_16")
     argparser.add_argument("--dataset-path", default="dataset")
-    argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     args = argparser.parse_args()
 
-    with sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as db:
-        tags = load_tags(db, args.tag_min_post_count)
+    tags = load_tags(args.dataset_path)
 
     device = torch.device("cuda")
 

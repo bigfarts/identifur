@@ -1,4 +1,4 @@
-import enum
+from pyarrow import dataset
 import logging
 import contextlib
 import torch
@@ -7,17 +7,6 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from PIL import Image
 import pytorch_lightning as pl
 from torchvision import transforms
-
-
-class Category(enum.Enum):
-    GENERAL = 0
-    ARTIST = 1
-    COPYRIGHT = 3
-    CHARACTER = 4
-    SPECIES = 5
-    INVALID = 6
-    META = 7
-    LORE = 8
 
 
 def split_id(id, depth=3, factor=1000):
@@ -36,52 +25,34 @@ def format_split_id(sid):
     return parts
 
 
-def load_tags(db, min_post_count):
-    with contextlib.closing(db.cursor()) as cur:
-        cur.execute(
-            "SELECT name FROM tags WHERE post_count >= ? AND category IN (?, ?, ?, ?)",
-            [
-                min_post_count,
-                Category.GENERAL.value,
-                Category.CHARACTER.value,
-                Category.COPYRIGHT.value,
-                Category.SPECIES.value,
-            ],
-        )
-        return [name for name, in cur] + [f"rating: {r}" for r in "sqe"]
+def load_tags(dataset_path):
+    with open(os.path.join(dataset_path, "_tags"), "rt", encoding="utf-8") as f:
+        return [line.rstrip("\n") for line in f]
 
 
 class E621Dataset(Dataset):
-    def __init__(self, post_ids, db, tags, dataset_path="dataset"):
-        self.post_ids = post_ids
-        self.db = db
-        self.tags = tags
+    def __init__(self, dataset_path="dataset"):
         self.dataset_path = dataset_path
+        self.tags = load_tags(dataset_path)
+        self.table = dataset.dataset(
+            os.path.join(dataset_path, "_posts"), format="arrow"
+        ).to_table()
 
     def __len__(self):
-        return len(self.post_ids)
+        return self.table.num_rows
 
     def __getitem__(self, index):
-        id = self.post_ids[index]
-
-        fsid = format_split_id(split_id(id))
+        fsid = format_split_id(split_id(self.table[0][index].as_py()))
         img = Image.open(
             os.path.join(self.dataset_path, *fsid),
             formats=["JPEG", "PNG"],
         )
 
-        with contextlib.closing(self.db.cursor()) as cur:
-            cur.execute("SELECT tag_string, rating FROM posts WHERE id = ?", [id])
-            (tag_string, rating) = cur.fetchone()
-
-        tags = set(tag_string.split(" "))
-        tags.add(f"rating: {rating}")
-
         img = img.convert("RGB")
         return (
             img,
             torch.tensor(
-                [1 if tag in tags else 0 for tag in self.tags],
+                [v.as_py() for v in self.table[1][index]],
                 dtype=torch.float32,
             ),
         )
@@ -122,9 +93,6 @@ class SafeDataset(Dataset):
 class E621DataModule(pl.LightningDataModule):
     def __init__(
         self,
-        post_ids,
-        db,
-        tags,
         dataset_path="dataset",
         batch_size=32,
         splits=(0.6, 0.2, 0.2),
@@ -133,9 +101,6 @@ class E621DataModule(pl.LightningDataModule):
         num_workers=0,
     ):
         super().__init__()
-        self.post_ids = post_ids
-        self.db = db
-        self.tags = tags
         self.dataset_path = dataset_path
         self.batch_size = batch_size
         self.splits = splits
@@ -144,9 +109,7 @@ class E621DataModule(pl.LightningDataModule):
         self.num_workers = num_workers
 
     def setup(self, stage=None):
-        ds = SafeDataset(
-            E621Dataset(self.post_ids, self.db, self.tags, self.dataset_path)
-        )
+        ds = SafeDataset(E621Dataset(self.dataset_path))
 
         self.train, self.val, self.test = random_split(
             ds,
