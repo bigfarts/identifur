@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
+import numpy as np
 import argparse
 import sqlite3
-import numpy as np
 from PIL import Image
 import torch
 from torchvision import transforms
 from identifur import models
 from identifur.data import load_tags
+import pytorch_lightning as pl
 
 
 def main():
@@ -24,26 +25,27 @@ def main():
 
     device = torch.device("cuda")
 
-    checkpoint = torch.load(args.checkpoint, map_location=device)
     (model, input_size) = models.MODELS[args.base_model]
-    model = model(num_classes=len(tags), pretrained=False, requires_grad=False).to(
-        device
-    )
-    model.load_state_dict(checkpoint["model"])
+    model = models.LitModel.load_from_checkpoint(
+        args.checkpoint,
+        model=model(pretrained=True, requires_grad=False, num_classes=len(tags)),
+        num_labels=len(tags),
+    ).to(device)
     model.eval()
 
-    outputs = model(
-        transforms.ToTensor()(
-            transforms.Resize(input_size)(Image.open(args.sample).convert("RGB"))
+    with torch.no_grad():
+        outputs = model(
+            transforms.ToTensor()(
+                transforms.Resize(input_size)(Image.open(args.sample).convert("RGB"))
+            )
+            .unsqueeze(0)
+            .to(device),
         )
-        .unsqueeze(0)
-        .to(device),
-    )
-    outputs = torch.sigmoid(outputs)
-    outputs = outputs.detach().cpu()
-    sorted_indices = list(reversed(np.argsort(outputs[0])))
-    for i in sorted_indices[:10]:
-        print(tags[i], outputs[0][i].item())
+        outputs = torch.sigmoid(outputs)
+        outputs = outputs.detach().cpu()
+        sorted_indices = list(reversed(np.argsort(outputs[0])))
+        for i in sorted_indices[:10]:
+            print(tags[i], outputs[0][i].item())
 
 
 if __name__ == "__main__":
