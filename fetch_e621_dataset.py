@@ -96,13 +96,71 @@ async def guarded_fetch(session, stats, output_path, db, data_db, id, fetch_full
         logging.exception("failed to download %d", id)
 
 
+def init_db(db):
+    db.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS selected
+            ( post_id INTEGER PRIMARY KEY
+            )
+        STRICT;
+
+        CREATE TABLE IF NOT EXISTS visited
+            ( post_id INTEGER PRIMARY KEY
+            )
+        STRICT;
+
+        CREATE TABLE IF NOT EXISTS downloaded
+            ( post_id INTEGER PRIMARY KEY
+            )
+        STRICT;
+        """
+    )
+
+
+def rebuild_selected_table(
+    db,
+    data_db,
+    minimum_score=0,
+    allowed_ratings="sqe",
+    blacklisted_tags=frozenset(),
+    minimum_tag_count=0,
+):
+    with contextlib.closing(data_db.cursor()) as cur:
+        cur.execute("SELECT COUNT(*) FROM posts")
+        (n,) = cur.fetchone()
+
+    with contextlib.closing(data_db.cursor()) as cur:
+        cur.execute(
+            "SELECT id, tag_string FROM posts WHERE NOT is_deleted AND NOT is_pending AND score >= ? AND INSTR(?, rating)",
+            [minimum_score, allowed_ratings],
+        )
+        for id, tag_string in tqdm(cur, total=n):
+            tags = tag_string.split(" ")
+            if len(tags) < minimum_tag_count or any(
+                tag in blacklisted_tags for tag in tags
+            ):
+                continue
+
+            db.execute("""INSERT OR IGNORE INTO selected(post_id) VALUES(?)""", [id])
+
+
+RATINGS = "sqe"
+
+
 async def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
     argparser.add_argument("--dls-db", default="dls.db")
+    argparser.add_argument(
+        "--rebuild-selected-table", default=False, action="store_true"
+    )
     argparser.add_argument("--num-workers", default=16, type=int)
     argparser.add_argument("--output-path", default="dataset")
     argparser.add_argument("--fetch-full-image", default=False, action="store_true")
+    argparser.add_argument("--blacklisted-tags", default="loli,shota")
+    argparser.add_argument("--minimum-score", default=0, type=int)
+    argparser.add_argument("--minimum-tag-count", default=0, type=int)
+    argparser.add_argument("--maximum-rating", default="e")
     args = argparser.parse_args()
 
     queue = asyncio.Queue(args.num_workers)
@@ -111,6 +169,35 @@ async def main():
         sqlite3.connect(args.dls_db) as db,
         sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as data_db,
     ):
+        init_db(db)
+
+        should_rebuild_selected_table = args.rebuild_selected_table
+        if not should_rebuild_selected_table:
+            with contextlib.closing(db.cursor()) as cur:
+                cur.execute("SELECT NOT EXISTS(SELECT 1 FROM selected)")
+                (should_rebuild_selected_table,) = cur.fetchone()
+
+        if should_rebuild_selected_table:
+            blacklisted_tags = frozenset(
+                args.blacklisted_tags.split(",") if args.blacklisted_tags else []
+            )
+            allowed_ratings = RATINGS[: RATINGS.index(args.maximum_rating) + 1]
+            logging.info(
+                "selected table was either empty or rebuild was requested\nblacklisted tags: %s\nminimum score: %d\nminimum tag count: %d\nallowed ratings: %s",
+                blacklisted_tags,
+                args.minimum_score,
+                args.minimum_tag_count,
+                allowed_ratings,
+            )
+            rebuild_selected_table(
+                db,
+                data_db,
+                args.minimum_score,
+                allowed_ratings,
+                blacklisted_tags,
+                args.minimum_tag_count,
+            )
+
         stats = Stats()
         async with aiohttp.ClientSession() as session:
             workers = [
