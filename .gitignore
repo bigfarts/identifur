@@ -6,3 +6,4 @@
 *.db-journal
 __pycache__
 test.png
+/lightning_logs
