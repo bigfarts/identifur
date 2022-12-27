@@ -7,12 +7,12 @@ import logging
 import aiohttp
 import sqlite3
 import os
-from identifur.data import split_id, format_split_id
+from identifur.id import split_id, format_split_id
 
 logging.basicConfig(level=logging.INFO)
 
 
-async def fetch(output_path, db, data_db, id, fetch_full_image):
+async def fetch(session, output_path, db, data_db, id, fetch_full_image):
     fsid = format_split_id(split_id(id))
     try:
         os.makedirs(os.path.join(output_path, *fsid[:-1]))
@@ -33,53 +33,52 @@ async def fetch(output_path, db, data_db, id, fetch_full_image):
 
     split_path = f"{md5[0:2]}/{md5[2:4]}/{md5}"
 
-    async with aiohttp.ClientSession() as session:
-        resp = None
-        if not fetch_full_image:
-            # Prefer samples, since we don't actually process the whole thing anyway.
-            resp = await session.get(
-                f"https://static1.e621.net/data/sample/{split_path}.jpg"
-            )
-            if resp.status == 404:
-                resp = None
-            else:
-                resp.raise_for_status()
-
-        if resp is None:
-            resp = await session.get(
-                f"https://static1.e621.net/data/{split_path}.{file_ext}"
-            )
-
+    resp = None
+    if not fetch_full_image:
+        # Prefer samples, since we don't actually process the whole thing anyway.
+        resp = await session.get(
+            f"https://static1.e621.net/data/sample/{split_path}.jpg"
+        )
         if resp.status == 404:
-            logging.warn("%d not found, skipping", id)
-            db.execute("INSERT INTO visited(post_id) VALUES(?)", [id])
-            db.commit()
-            return
+            resp = None
+        else:
+            resp.raise_for_status()
 
-        resp.raise_for_status()
+    if resp is None:
+        resp = await session.get(
+            f"https://static1.e621.net/data/{split_path}.{file_ext}"
+        )
 
-        with open(os.path.join(output_path, *fsid), "wb") as f:
-            async for data in resp.content.iter_any():
-                f.write(data)
-
-        db.execute("INSERT INTO downloaded(post_id) VALUES(?)", [id])
+    if resp.status == 404:
+        logging.warn("%d not found, skipping", id)
         db.execute("INSERT INTO visited(post_id) VALUES(?)", [id])
         db.commit()
+        return
+
+    resp.raise_for_status()
+
+    with open(os.path.join(output_path, *fsid), "wb") as f:
+        async for data in resp.content.iter_any():
+            f.write(data)
+
+    db.execute("INSERT INTO downloaded(post_id) VALUES(?)", [id])
+    db.execute("INSERT INTO visited(post_id) VALUES(?)", [id])
+    db.commit()
 
 
-async def worker(output_path, db, data_db, queue, fetch_full_image):
+async def worker(session, output_path, db, data_db, queue, fetch_full_image):
     try:
         while True:
             id = await queue.get()
-            await guarded_fetch(output_path, db, data_db, id, fetch_full_image)
+            await guarded_fetch(session, output_path, db, data_db, id, fetch_full_image)
             queue.task_done()
     except asyncio.CancelledError:
         return
 
 
-async def guarded_fetch(output_path, db, data_db, id, fetch_full_image):
+async def guarded_fetch(session, output_path, db, data_db, id, fetch_full_image):
     try:
-        await fetch(output_path, db, data_db, id, fetch_full_image)
+        await fetch(session, output_path, db, data_db, id, fetch_full_image)
     except Exception:
         logging.exception("failed to download %d", id)
 
@@ -99,36 +98,44 @@ async def main():
         sqlite3.connect(args.dls_db) as db,
         sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True) as data_db,
     ):
-        workers = [
-            asyncio.create_task(
-                worker(args.output_path, db, data_db, queue, args.fetch_full_image)
-            )
-            for _ in range(args.num_workers)
-        ]
-
-        async def leader():
-            with contextlib.closing(db.cursor()) as cur:
-                cur.execute(
-                    "SELECT (SELECT COUNT(*) FROM selected) - (SELECT COUNT(*) FROM visited)"
+        async with aiohttp.ClientSession() as session:
+            workers = [
+                asyncio.create_task(
+                    worker(
+                        session,
+                        args.output_path,
+                        db,
+                        data_db,
+                        queue,
+                        args.fetch_full_image,
+                    )
                 )
-                (n,) = cur.fetchone()
+                for _ in range(args.num_workers)
+            ]
 
-            with contextlib.closing(db.cursor()) as cur:
-                cur.execute(
-                    "SELECT selected.post_id FROM selected LEFT JOIN visited ON selected.post_id = visited.post_id WHERE visited.post_id IS NULL"
-                )
+            async def leader():
+                with contextlib.closing(db.cursor()) as cur:
+                    cur.execute(
+                        "SELECT (SELECT COUNT(*) FROM selected) - (SELECT COUNT(*) FROM visited)"
+                    )
+                    (n,) = cur.fetchone()
 
-                pbar = tqdm(cur, total=n)
-                for (id,) in pbar:
-                    pbar.set_description(f"{id}")
-                    await queue.put(id)
+                with contextlib.closing(db.cursor()) as cur:
+                    cur.execute(
+                        "SELECT selected.post_id FROM selected LEFT JOIN visited ON selected.post_id = visited.post_id WHERE visited.post_id IS NULL"
+                    )
 
-            await queue.join()
+                    pbar = tqdm(cur, total=n)
+                    for (id,) in pbar:
+                        pbar.set_description(f"{id}")
+                        await queue.put(id)
 
-            for worker in workers:
-                worker.cancel()
+                await queue.join()
 
-        await asyncio.gather(*([leader()] + workers))
+                for worker in workers:
+                    worker.cancel()
+
+            await asyncio.gather(*([leader()] + workers))
 
 
 if __name__ == "__main__":
