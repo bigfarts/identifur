@@ -8,40 +8,11 @@ from identifur import models
 from identifur.data import E621Dataset, load_tags
 from torch import optim, nn
 from torchvision import transforms
+from torchmetrics import Accuracy
 from torch.utils.data import Dataset, DataLoader, random_split
-from ignite.engine import create_supervised_trainer, create_supervised_evaluator, Events
-from ignite.metrics import Accuracy, Loss
-from ignite.handlers import (
-    FastaiLRFinder,
-    Checkpoint,
-    global_step_from_engine,
-    DiskSaver,
-)
-from ignite.contrib.handlers.tqdm_logger import ProgressBar
+import pytorch_lightning as pl
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-8s %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-    filename="train.log",
-    encoding="utf-8",
-    level=logging.INFO,
-)
-
-
-class SafeDataset(Dataset):
-    def __init__(self, ds):
-        self.ds = ds
-
-    def __len__(self):
-        return len(self.ds)
-
-    def __getitem__(self, index):
-        while True:
-            try:
-                return self.ds[index]
-            except Exception:
-                logging.exception("failed to open %d, will pick next one", index)
-            index = (index + 1) % len(self)
+logging.basicConfig(level=logging.INFO)
 
 
 class TransformingDataset(Dataset):
@@ -60,6 +31,165 @@ class TransformingDataset(Dataset):
         return self.transform(image), label
 
 
+class SafeDataset(Dataset):
+    def __init__(self, ds):
+        self.ds = ds
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, index):
+        while True:
+            try:
+                return self.ds[index]
+            except Exception:
+                logging.exception("failed to open %d, will pick next one", index)
+            index = (index + 1) % len(self)
+
+
+class E621DataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        post_ids,
+        db,
+        tags,
+        dataset_path="dataset",
+        batch_size=32,
+        splits=(0.6, 0.2, 0.2),
+        split_seed=42,
+        input_size=(224, 224),
+        num_workers=0,
+    ):
+        super().__init__()
+        self.post_ids = post_ids
+        self.db = db
+        self.tags = tags
+        self.dataset_path = dataset_path
+        self.batch_size = batch_size
+        self.splits = splits
+        self.split_seed = split_seed
+        self.input_size = input_size
+        self.num_workers = num_workers
+
+    def setup(self, stage=None):
+        ds = SafeDataset(
+            E621Dataset(self.post_ids, self.db, self.tags, self.dataset_path)
+        )
+
+        self.train, self.val, self.test = random_split(
+            ds,
+            self.splits,
+            generator=torch.Generator().manual_seed(self.split_seed),
+        )
+
+    def train_dataloader(self):
+        return DataLoader(
+            TransformingDataset(
+                self.train,
+                transforms.Compose(
+                    [
+                        transforms.Resize(self.input_size),
+                        transforms.RandomHorizontalFlip(p=0.5),
+                        transforms.RandomRotation(degrees=45),
+                        transforms.ToTensor(),
+                    ]
+                ),
+            ),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            TransformingDataset(
+                self.val,
+                transforms.Compose(
+                    [
+                        transforms.Resize(self.input_size),
+                        transforms.ToTensor(),
+                    ]
+                ),
+            ),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            TransformingDataset(
+                self.val,
+                transforms.Compose(
+                    [
+                        transforms.Resize(self.input_size),
+                        transforms.ToTensor(),
+                    ]
+                ),
+            ),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
+
+
+class E621Module(pl.LightningModule):
+    def __init__(self, model, num_labels, lr=2e-4):
+        super().__init__()
+        self.model = model
+        self.lr = lr
+        self.criterion = nn.BCEWithLogitsLoss()
+        self.accuracy = Accuracy(task="multilabel", num_labels=num_labels)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def configure_optimizers(self):
+        return optim.Adam(self.model.parameters(), lr=self.lr)
+
+    def training_step(self, batch):
+        y_pred, y = batch
+        y_pred = self.forward(y_pred)
+
+        loss = self.criterion(y_pred, y)
+        self.log("train/loss", loss)
+
+        acc = self.accuracy(y_pred, y)
+        self.log("train/acc", acc)
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        y_pred, y = batch
+        y_pred = self.forward(y_pred)
+
+        loss = self.criterion(y_pred, y)
+        self.log("val/loss", loss)
+
+        acc = self.accuracy(y_pred, y)
+        self.log("val/acc", acc)
+
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        y_pred, y = batch
+        y_pred = self.forward(y_pred)
+        loss = self.criterion(y_pred, y)
+
+        return {"loss": loss, "outputs": y_pred, "y": y}
+
+    def test_epoch_end(self, outputs):
+        loss = torch.stack([x["loss"] for x in outputs]).mean()
+        output = torch.cat([x["outputs"] for x in outputs], dim=0)
+
+        ys = torch.cat([x["y"] for x in outputs], dim=0)
+
+        self.log("test/loss", loss)
+        acc = self.accuracy(output, ys)
+        self.log("test/acc", acc)
+
+        self.test_ys = ys
+        self.test_output = output
+
+
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
@@ -69,18 +199,11 @@ def main():
     argparser.add_argument("--random-split-seed", default=42, type=int)
     argparser.add_argument("--batch-size", default=64, type=int)
     argparser.add_argument("--tag-min-post-count", default=2500, type=int)
-    argparser.add_argument("--learning-rate", default=None, type=float)
-    argparser.add_argument("--trainer-log-interval", default=100, type=int)
-    argparser.add_argument(
-        "--trainer-iteration-checkpoint-intervals", default=1000, type=int
-    )
-    argparser.add_argument("--max-epochs", default=10, type=int)
     argparser.add_argument("--train-data-split", default=0.6, type=float)
     argparser.add_argument("--validation-data-split", default=0.2, type=float)
     argparser.add_argument("--test-data-split", default=0.2, type=float)
-    argparser.add_argument(
-        "--allow-checkpoints-dir-empty", default=False, action="store_true"
-    )
+    argparser.add_argument("--max-epochs", default=10, type=int)
+    argparser.add_argument("--num-workers", default=0, type=int)
     args = argparser.parse_args()
 
     with sqlite3.connect(f"file:{args.dls_db}?mode=ro", uri=True) as dls_db:
@@ -93,171 +216,35 @@ def main():
         tags = load_tags(db, args.tag_min_post_count)
         logging.info("loaded %d tags", len(tags))
 
-        device = torch.device("cuda")
-
         model, input_size = models.MODELS[args.base_model]
-        model = model(pretrained=True, requires_grad=False, num_classes=len(tags)).to(
-            device
-        )
 
-        optimizer = optim.Adam(
-            model.parameters(),
-            lr=0.0001 if args.learning_rate is None else args.learning_rate,
-        )
-        criterion = nn.BCEWithLogitsLoss()
-
-        ds = SafeDataset(E621Dataset(post_ids, db, tags, args.dataset_path))
-
-        train_data, val_data, test_data = random_split(
-            ds,
-            [args.train_data_split, args.validation_data_split, args.test_data_split],
-            generator=torch.Generator().manual_seed(args.random_split_seed),
-        )
-
-        train_loader = DataLoader(
-            TransformingDataset(
-                train_data,
-                transforms.Compose(
-                    [
-                        transforms.Resize(input_size),
-                        transforms.RandomHorizontalFlip(p=0.5),
-                        transforms.RandomRotation(degrees=45),
-                        transforms.ToTensor(),
-                    ]
-                ),
-            ),
+        dm = E621DataModule(
+            post_ids=post_ids,
+            db=db,
+            tags=tags,
+            dataset_path=args.dataset_path,
             batch_size=args.batch_size,
-            shuffle=True,
+            splits=[
+                args.train_data_split,
+                args.validation_data_split,
+                args.test_data_split,
+            ],
+            split_seed=args.random_split_seed,
+            input_size=input_size,
+            num_workers=args.num_workers,
         )
 
-        to_save = {"model": model, "optimizer": optimizer}
-
-        trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
-        ProgressBar().attach(trainer)
-
-        if args.learning_rate is None:
-            logging.info("no learning rate specified, will try to find one")
-            lr_finder = FastaiLRFinder()
-            with lr_finder.attach(
-                trainer, to_save, end_lr=1e-02
-            ) as trainer_with_lr_finder:
-                trainer_with_lr_finder.run(train_loader)
-            logging.info(
-                "LR finder logs: %s, suggested LR: %.8f",
-                lr_finder.get_results(),
-                lr_finder.lr_suggestion(),
-            )
-            lr_finder.apply_suggested_lr(optimizer)
-
-        val_loader = DataLoader(
-            TransformingDataset(
-                val_data,
-                transforms.Compose(
-                    [
-                        transforms.Resize((224, 224)),
-                        transforms.ToTensor(),
-                    ]
-                ),
-            ),
-            batch_size=args.batch_size,
-            shuffle=False,
+        model = E621Module(
+            model=model(pretrained=True, requires_grad=False, num_classes=len(tags)),
+            num_labels=len(tags),
         )
 
-        trainer.add_event_handler(
-            Events.ITERATION_COMPLETED(
-                every=args.trainer_iteration_checkpoint_intervals
-            ),
-            Checkpoint(
-                to_save,
-                DiskSaver(
-                    "models/current_iteration",
-                    require_empty=not args.allow_checkpoints_dir_empty,
-                ),
-                n_saved=2,
-            ),
+        trainer = pl.Trainer(
+            max_epochs=args.max_epochs,
+            accelerator="gpu",
         )
-        trainer.add_event_handler(
-            Events.EPOCH_COMPLETED,
-            Checkpoint(
-                to_save,
-                DiskSaver(
-                    "models/epoch",
-                    require_empty=not args.allow_checkpoints_dir_empty,
-                ),
-                n_saved=2,
-                global_step_transform=lambda *_: trainer.state.epoch,
-            ),
-        )
-
-        @trainer.on(Events.ITERATION_COMPLETED(every=args.trainer_log_interval))
-        def log_training_loss(trainer):
-            logging.info(
-                "Epoch[%d], Iter[%d] Loss: %.2f",
-                trainer.state.epoch,
-                trainer.state.iteration,
-                trainer.state.output,
-            )
-
-        @trainer.on(Events.EPOCH_COMPLETED)
-        def log_training_results(trainer):
-            train_evaluator.run(train_loader)
-            metrics = train_evaluator.state.metrics
-            logging.info(
-                "Training Results - Epoch[%d] Avg accuracy: %.2f Avg loss: %.2f",
-                trainer.state.epoch,
-                metrics["accuracy"],
-                metrics["loss"],
-            )
-
-        @trainer.on(Events.EPOCH_COMPLETED)
-        def log_validation_results(trainer):
-            val_evaluator.run(val_loader)
-            metrics = val_evaluator.state.metrics
-            logging.info(
-                "Validation Results - Epoch[%d] Avg accuracy: %.2f Avg loss: %.2f",
-                trainer.state.epoch,
-                metrics["accuracy"],
-                metrics["loss"],
-            )
-
-        def thresholded_output_transform(output):
-            y_pred, y = output
-            y_pred = torch.sigmoid(y_pred)
-            y_pred = torch.round(y_pred)
-            return y_pred, y
-
-        val_metrics = {
-            "accuracy": Accuracy(
-                is_multilabel=True, output_transform=thresholded_output_transform
-            ),
-            "loss": Loss(criterion),
-        }
-
-        train_evaluator = create_supervised_evaluator(
-            model, metrics=val_metrics, device=device
-        )
-        ProgressBar().attach(train_evaluator)
-
-        val_evaluator = create_supervised_evaluator(
-            model, metrics=val_metrics, device=device
-        )
-        ProgressBar().attach(val_evaluator)
-        val_evaluator.add_event_handler(
-            Events.COMPLETED,
-            Checkpoint(
-                to_save,
-                DiskSaver(
-                    "models/best",
-                    require_empty=not args.allow_checkpoints_dir_empty,
-                ),
-                n_saved=2,
-                filename_prefix="best",
-                score_name="accuracy",
-                global_step_transform=global_step_from_engine(trainer),
-            ),
-        )
-
-        trainer.run(train_loader, max_epochs=args.max_epochs)
+        trainer.fit(model, dm)
+        trainer.test(model, dm)
 
 
 if __name__ == "__main__":
