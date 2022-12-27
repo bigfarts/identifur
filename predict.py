@@ -28,7 +28,7 @@ def main():
     (model, input_size) = models.MODELS[args.base_model]
     model = models.LitModel.load_from_checkpoint(
         args.checkpoint,
-        model=model(pretrained=True, requires_grad=False, num_classes=len(tags)),
+        model=model(pretrained=False, requires_grad=False, num_classes=len(tags)),
         num_labels=len(tags),
     ).to(device)
     model.eval()
