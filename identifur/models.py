@@ -6,47 +6,47 @@ from torchmetrics import Accuracy
 import pytorch_lightning as pl
 
 
-def set_requires_grad(model, requires_grad):
-    for param in model.parameters():
-        param.requires_grad = requires_grad
+def _make_resnet_model(f):
+    def _model(weights, num_labels, requires_grad=False):
+        model = f(weights=weights)
+        for param in model.parameters():
+            param.requires_grad = requires_grad
+        model.fc = nn.Linear(model.fc.in_features, num_labels)
+        return model
+
+    return _model
 
 
-def resnet152(pretrained, num_classes, requires_grad):
-    model = models.resnet152(
-        weights=models.ResNet152_Weights.DEFAULT if pretrained else None
-    )
-    set_requires_grad(model, requires_grad)
-
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
-    return model
-
-
-def vit_l_16(pretrained, num_classes, requires_grad):
-    model = models.vit_l_16(
-        weights=models.ViT_L_16_Weights.DEFAULT if pretrained else None,
-    )
-    set_requires_grad(model, requires_grad)
-
-    model.heads = nn.Sequential(
-        OrderedDict(
-            [
-                ("head", nn.Linear(model.hidden_dim, num_classes)),
-            ]
+def _make_vit_model(f):
+    def _model(weights, num_labels, requires_grad=False):
+        model = f(weights=weights)
+        for param in model.parameters():
+            param.requires_grad = requires_grad
+        model.heads = nn.Sequential(
+            OrderedDict(
+                [
+                    ("head", nn.Linear(model.hidden_dim, num_labels)),
+                ]
+            )
         )
-    )
-    return model
+        return model
+
+    return _model
 
 
 MODELS = {
-    "resnet152": (resnet152, (224, 224)),
-    "vit_l_16": (vit_l_16, (224, 224)),
+    "resnet152": (_make_resnet_model(models.resnet152), (224, 224)),
+    "vit_b_16": (_make_vit_model(models.vit_b_16), (224, 224)),
+    "vit_b_32": (_make_vit_model(models.vit_b_32), (224, 224)),
+    "vit_l_16": (_make_vit_model(models.vit_l_16), (224, 224)),
+    "vit_l_32": (_make_vit_model(models.vit_l_32), (224, 224)),
 }
 
 
 class LitModel(pl.LightningModule):
-    def __init__(self, model, num_labels, lr=2e-4):
+    def __init__(self, model, num_labels, lr=2e-4, weights=None, requires_grad=False):
         super().__init__()
-        self.model = model
+        self.model = model(weights, num_labels, requires_grad)
         self.lr = lr
         self.criterion = nn.BCEWithLogitsLoss()
         self.accuracy = Accuracy(task="multilabel", num_labels=num_labels)

@@ -1,7 +1,7 @@
 from pyarrow import dataset
 import logging
-import contextlib
 import torch
+from torch import nn
 import os
 from torch.utils.data import Dataset, DataLoader, random_split
 from PIL import Image
@@ -35,7 +35,7 @@ class E621Dataset(Dataset):
         self.dataset_path = dataset_path
         self.tags = load_tags(dataset_path)
         self.table = dataset.dataset(
-            os.path.join(dataset_path, "_meta", "table"), format="arrow"
+            os.path.join(dataset_path, "_meta", "table"), format="feather"
         ).to_table()
 
     def __len__(self):
@@ -43,14 +43,14 @@ class E621Dataset(Dataset):
 
     def __getitem__(self, index):
         fsid = format_split_id(split_id(self.table[0][index].as_py()))
+
         img = Image.open(
             os.path.join(self.dataset_path, *fsid),
             formats=["JPEG", "PNG"],
-        )
+        ).convert("RGB")
 
-        img = img.convert("RGB")
         return (
-            img,
+            transforms.ToTensor()(img),
             torch.tensor(
                 [v.as_py() for v in self.table[1][index]],
                 dtype=torch.float32,
@@ -121,13 +121,10 @@ class E621DataModule(pl.LightningDataModule):
         return DataLoader(
             TransformingDataset(
                 self.train,
-                transforms.Compose(
-                    [
-                        transforms.Resize(self.input_size),
-                        transforms.RandomHorizontalFlip(p=0.5),
-                        transforms.RandomRotation(degrees=45),
-                        transforms.ToTensor(),
-                    ]
+                nn.Sequential(
+                    transforms.Resize(self.input_size),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.RandomRotation(degrees=180),
                 ),
             ),
             batch_size=self.batch_size,
@@ -139,11 +136,8 @@ class E621DataModule(pl.LightningDataModule):
         return DataLoader(
             TransformingDataset(
                 self.val,
-                transforms.Compose(
-                    [
-                        transforms.Resize(self.input_size),
-                        transforms.ToTensor(),
-                    ]
+                nn.Sequential(
+                    transforms.Resize(self.input_size),
                 ),
             ),
             batch_size=self.batch_size,
@@ -154,11 +148,8 @@ class E621DataModule(pl.LightningDataModule):
         return DataLoader(
             TransformingDataset(
                 self.val,
-                transforms.Compose(
-                    [
-                        transforms.Resize(self.input_size),
-                        transforms.ToTensor(),
-                    ]
+                nn.Sequential(
+                    transforms.Resize(self.input_size),
                 ),
             ),
             batch_size=self.batch_size,

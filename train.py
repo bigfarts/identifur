@@ -39,8 +39,7 @@ def main():
     )
 
     model = models.LitModel(
-        model=model(pretrained=True, requires_grad=False, num_classes=len(tags)),
-        num_labels=len(tags),
+        model=model, weights="DEFAULT", num_labels=len(tags), requires_grad=False
     )
 
     trainer = pl.Trainer(

@@ -71,10 +71,14 @@ def main():
             db.execute("ATTACH DATABASE ? AS dls", [f"file:{args.dls_db}?mode=ro"])
 
             with contextlib.closing(db.cursor()) as cur:
+                cur.execute("SELECT COUNT(*) FROM dls.downloaded")
+                (n,) = cur.fetchone()
+
+            with contextlib.closing(db.cursor()) as cur:
                 cur.execute(
                     "SELECT id, tag_string, rating FROM posts INNER JOIN dls.downloaded ON dls.downloaded.post_id = posts.id"
                 )
-                for id, tag_string, rating in tqdm(cur):
+                for id, tag_string, rating in tqdm(cur, total=n):
                     post_tags = set(tag_string.split(" "))
                     post_tags.add(f"rating: {rating}")
 
@@ -93,7 +97,7 @@ def main():
     dataset.write_dataset(
         data_iter(),
         os.path.join(meta_path, "table"),
-        format="arrow",
+        format="feather",
         schema=schema,
     )
 
