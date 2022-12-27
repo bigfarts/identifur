@@ -53,6 +53,15 @@ class E621Dataset(Dataset):
     def __init__(self, dataset_path="dataset"):
         self.dataset_path = dataset_path
 
+    def __getstate__(self):
+        return {
+            k: v
+            for k, v in self.__dict__.items()
+            if not isinstance(
+                getattr(self.__class__, k, None), functools.cached_property
+            )
+        }
+
     @functools.cached_property
     def _index(self):
         return Index(self.dataset_path)
