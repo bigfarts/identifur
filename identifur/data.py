@@ -144,10 +144,13 @@ class E621DataModule(pl.LightningDataModule):
         return DataLoader(
             TransformingDataset(
                 self.train,
-                nn.Sequential(
-                    transforms.Resize(self.input_size),
-                    transforms.RandomHorizontalFlip(p=0.5),
-                    transforms.RandomRotation(degrees=180),
+                transforms.Compose(
+                    [
+                        transforms.Resize(self.input_size),
+                        transforms.RandomHorizontalFlip(p=0.5),
+                        transforms.RandomRotation(degrees=180),
+                        transforms.ToTensor(),
+                    ]
                 ),
             ),
             batch_size=self.batch_size,
@@ -159,8 +162,11 @@ class E621DataModule(pl.LightningDataModule):
         return DataLoader(
             TransformingDataset(
                 self.val,
-                nn.Sequential(
-                    transforms.Resize(self.input_size),
+                transforms.Compose(
+                    [
+                        transforms.Resize(self.input_size),
+                        transforms.ToTensor(),
+                    ]
                 ),
             ),
             batch_size=self.batch_size,
@@ -171,8 +177,11 @@ class E621DataModule(pl.LightningDataModule):
         return DataLoader(
             TransformingDataset(
                 self.val,
-                nn.Sequential(
-                    transforms.Resize(self.input_size),
+                transforms.Compose(
+                    [
+                        transforms.Resize(self.input_size),
+                        transforms.ToTensor(),
+                    ]
                 ),
             ),
             batch_size=self.batch_size,
