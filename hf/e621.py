@@ -76,7 +76,10 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
                 "SELECT posts.id, posts.tag_string, posts.rating FROM dls.downloaded INNER JOIN posts ON dls.downloaded.post_id = posts.id"
             )
             for id, tag_string, rating in cur:
-                if mmh3.hash(struct.pack(">Q", id)) % _NUM_SHARDS not in shard_ids:
+                if (
+                    len(shard_ids) != _NUM_SHARDS
+                    and mmh3.hash(struct.pack(">Q", id)) % _NUM_SHARDS not in shard_ids
+                ):
                     continue
 
                 fsid = format_split_id(split_id(id))
