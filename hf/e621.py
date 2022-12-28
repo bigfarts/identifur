@@ -24,8 +24,6 @@ def format_split_id(sid):
     return parts
 
 
-_DESCRIPTION = "TODO"
-
 _NUM_SHARDS = 1024
 
 
@@ -46,7 +44,7 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
 
     def _info(self):
         return datasets.DatasetInfo(
-            description=_DESCRIPTION,
+            description="This is a dataset of all images at sample resolution from e621.net, along with their tags and rating.",
             features=datasets.Features(
                 {
                     "image": datasets.Image(),
