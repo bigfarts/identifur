@@ -5,7 +5,6 @@ import os
 import datasets
 import sqlite3
 import mmh3
-from PIL import Image
 
 
 def split_id(id, depth=3, factor=1000):
@@ -79,15 +78,14 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
 
                 fsid = format_split_id(split_id(id))
                 try:
-                    img = Image.open(os.path.join(self.images_path, *fsid))
+                    with open(os.path.join(self.images_path, *fsid), "rb") as f:
+                        buf = f.read()
                 except Exception:
                     logging.exception("failed to load image %s", id)
                     continue
 
-                tags = tag_string.split(" ")
-
                 yield id, {
-                    "image": img,
-                    "tags": tags,
+                    "image": {"path": fsid[-1], "bytes": buf},
+                    "tags": tag_string.split(" "),
                     "rating": rating,
                 }
