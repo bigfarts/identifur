@@ -12,6 +12,7 @@ if __name__ == "__main__":
     argparser.add_argument("--images-path", default="images")
     argparser.add_argument("--hub-repo-id", default=None)
     argparser.add_argument("--num-processes", default=1, type=int)
+    argparser.add_argument("--writer-batch-size", default=20000, type=int)
     args = argparser.parse_args()
 
     date = args.date
@@ -30,6 +31,7 @@ if __name__ == "__main__":
         db_path=args.data_db,
         dls_db_path=args.dls_db,
         images_path=args.images_path,
+        writer_batch_size=args.writer_batch_size,
     )
 
     ds.save_to_disk("dataset")

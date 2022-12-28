@@ -27,8 +27,6 @@ _NUM_SHARDS = 1024
 
 
 class E621Dataset(datasets.GeneratorBasedBuilder):
-    DEFAULT_WRITER_BATCH_SIZE = 20000
-
     def __init__(
         self,
         *args,

@@ -14,21 +14,21 @@ python3 fetch_e621_data_db.py $DATE
 
 this generates a `data-$DATE.db` file for use with everything else. if you're not sure what to use for the date, check the files in https://e621.net/db_export/.
 
-### 2. fetch the dataset
+### 2. fetch the images
 
 ```sh
-python3 fetch_e621_dataset.py data-$DATE.db
+python3 fetch_e621_images.py data-$DATE.db
 ```
 
-this will start populating the `dataset` directory. you can interrupt and restart the script at any time: current status is saved to `dls.db`. if you need to update the selections (e.g. due to a different minimum score parameter or the data db was updated), pass `--rebuild-selected-table`.
+this will start populating the `images` directory. you can interrupt and restart the script at any time: current status is saved to `dls.db`. if you need to update the selections (e.g. due to a different minimum score parameter or the data db was updated), pass `--rebuild-selected-table`.
 
-### 3. generating metadata
+### 3. build a huggingface dataset
 
 ```sh
-python3 build_dataset_metadata.py data-$DATE.db
+python3 build_huggingface_dataset.py data-$DATE.db
 ```
 
-this will add metadata to the dataset (tags, post index).
+this will build a huggingface dataset for use with training.
 
 ## training the model
 
@@ -45,7 +45,3 @@ python3 predict.py models/version_0/checkpoints/epoch=10-*.ckpt image.jpg
 ```
 
 maybe the model works idk lol
-
-## about the model
-
-identifur uses a resnet-152 model pretrained against imagenet that is then trained against a tagged data set. each tag is a column in the label tensor.
