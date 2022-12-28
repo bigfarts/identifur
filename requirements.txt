@@ -7,3 +7,6 @@ pillow
 torchvision
 tqdm
 humanfriendly
+huggingface_hub
+datasets
+mmh3
