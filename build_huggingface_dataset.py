@@ -8,8 +8,6 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
     argparser.add_argument("--date", default=None)
-    argparser.add_argument("--dls-db", default="dls.db")
-    argparser.add_argument("--images-path", default="images")
     argparser.add_argument("--hub-repo-id", default=None)
     argparser.add_argument("--num-processes", default=1, type=int)
     argparser.add_argument("--writer-batch-size", default=20000, type=int)
