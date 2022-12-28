@@ -46,6 +46,7 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
             description="This is a dataset of all images at sample resolution from e621.net, along with their tags and rating.",
             features=datasets.Features(
                 {
+                    "id": datasets.Value("uint64"),
                     "image": datasets.Image(),
                     "tags": datasets.features.Sequence(datasets.Value("string")),
                     "rating": datasets.Value("string"),
@@ -85,6 +86,7 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
                     continue
 
                 yield id, {
+                    "id": id,
                     "image": {"bytes": buf},
                     "tags": tag_string.split(" "),
                     "rating": rating,
