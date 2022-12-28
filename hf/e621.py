@@ -38,6 +38,7 @@ class E621Config(datasets.BuilderConfig):
 
 class E621Dataset(datasets.GeneratorBasedBuilder):
     BUILDER_CONFIG_CLASS = E621Config
+    DEFAULT_WRITER_BATCH_SIZE = 20000
 
     def _info(self):
         return datasets.DatasetInfo(
