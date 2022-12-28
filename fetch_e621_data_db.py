@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS posts
     , is_status_locked INTEGER NOT NULL  -- actually bool
     , is_note_locked INTEGER NOT NULL  -- actually bool
     )
-STRICT;
+    ;
 
 CREATE TABLE IF NOT EXISTS tags
     ( id INTEGER PRIMARY KEY
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS tags
     , category INTEGER NOT NULL
     , post_count INTEGER NOT NULL
     )
-STRICT;
+    ;
 """
     )
 

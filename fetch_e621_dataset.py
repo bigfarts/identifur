@@ -83,17 +83,17 @@ def init_db(db):
         CREATE TABLE IF NOT EXISTS selected
             ( post_id INTEGER PRIMARY KEY
             )
-        STRICT;
+            ;
 
         CREATE TABLE IF NOT EXISTS visited
             ( post_id INTEGER PRIMARY KEY
             )
-        STRICT;
+            ;
 
         CREATE TABLE IF NOT EXISTS downloaded
             ( post_id INTEGER PRIMARY KEY
             )
-        STRICT;
+            ;
         """
     )
 

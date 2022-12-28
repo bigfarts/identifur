@@ -1,7 +1,7 @@
 pytorch_lightning
 torchmetrics
 aiohttp
-pytorch
+torch
 numpy
 pillow
 torchvision
