@@ -1,18 +1,49 @@
 #!/usr/bin/env python3
 import argparse
+import contextlib
 import logging
+import datasets
+import enum
+import sqlite3
 from identifur import models
-from identifur.data import E621DataModule, load_tags
+from identifur.data import E621DataModule
 import pytorch_lightning as pl
 
 logging.basicConfig(level=logging.INFO)
+
+
+class Category(enum.Enum):
+    GENERAL = 0
+    ARTIST = 1
+    COPYRIGHT = 3
+    CHARACTER = 4
+    SPECIES = 5
+    INVALID = 6
+    META = 7
+    LORE = 8
+
+
+def load_tags(db, min_post_count):
+    with contextlib.closing(db.cursor()) as cur:
+        cur.execute(
+            "SELECT name FROM tags WHERE post_count >= ? AND category IN (?, ?, ?, ?)",
+            [
+                min_post_count,
+                Category.GENERAL.value,
+                Category.CHARACTER.value,
+                Category.COPYRIGHT.value,
+                Category.SPECIES.value,
+            ],
+        )
+        return [name for name, in cur]
 
 
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
     argparser.add_argument("--base-model", default="vit_l_16")
-    argparser.add_argument("--dataset-path", default="./hf/e621.py")
+    argparser.add_argument("--dataset-path", default="./dataset")
+    argparser.add_argument("--labels-path", default="labels")
     argparser.add_argument("--random-split-seed", default=42, type=int)
     argparser.add_argument("--batch-size", default=64, type=int)
     argparser.add_argument("--train-data-split", default=0.6, type=float)
@@ -26,9 +57,20 @@ def main():
 
     model, input_size = models.MODELS[args.base_model]
 
-    tags = list(load_tags(args.dataset_path))
+    db = sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True)
+
+    labels = load_tags(db, args.tag_min_post_count) + [f"rating: {r}" for r in "sqe"]
+    with open(args.labels_path, "wt", encoding="utf-8") as f:
+        for label in labels:
+            f.write(label)
+            f.write("\n")
+
+    # TODO: not this
+    ds = datasets.load_from_disk(args.dataset_path)[datasets.Split.TRAIN]
+
     dm = E621DataModule(
-        dataset_path=args.dataset_path,
+        dataset=ds,
+        labels=labels,
         batch_size=args.batch_size,
         splits=[
             args.train_data_split,
@@ -41,7 +83,7 @@ def main():
     )
 
     model = models.LitModel(
-        model=model, weights="DEFAULT", num_labels=len(tags), requires_grad=False
+        model=model, weights="DEFAULT", labels=labels, requires_grad=False
     )
 
     trainer = pl.Trainer(

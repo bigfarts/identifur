@@ -32,4 +32,5 @@ if __name__ == "__main__":
         images_path=args.images_path,
     )
 
-    ds.push_to_hub(repo_id, private=True)
+    ds.save_to_disk("dataset")
+    # ds.push_to_hub(repo_id, private=True)
