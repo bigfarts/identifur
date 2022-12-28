@@ -34,5 +34,5 @@ if __name__ == "__main__":
         writer_batch_size=args.writer_batch_size,
     )
 
-    ds.save_to_disk("dataset")
-    # ds.push_to_hub(repo_id, private=True)
+    # ds.save_to_disk("dataset")
+    ds.push_to_hub(repo_id, private=True)

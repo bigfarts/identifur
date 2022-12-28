@@ -43,7 +43,13 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
 
     def _info(self):
         return datasets.DatasetInfo(
-            description="This is a dataset of all images at sample resolution from e621.net, along with their tags and rating.",
+            description="""
+All images of all ratings from e621.net from the date it was generated, at sample resolution where possible.
+
+Note that this dataset excludes images that are, at the time of scraping:
+- pending
+- tagged with tags indicating that it is illegal to possess in most jurisdictions
+""",
             features=datasets.Features(
                 {
                     "id": datasets.Value("uint64"),
