@@ -10,8 +10,9 @@ logging.basicConfig(level=logging.INFO)
 
 def main():
     argparser = argparse.ArgumentParser()
+    argparser.add_argument("data_db")
     argparser.add_argument("--base-model", default="vit_l_16")
-    argparser.add_argument("--dataset-path", default="dataset")
+    argparser.add_argument("--dataset-path", default="./hf/e621.py")
     argparser.add_argument("--random-split-seed", default=42, type=int)
     argparser.add_argument("--batch-size", default=64, type=int)
     argparser.add_argument("--train-data-split", default=0.6, type=float)
@@ -20,6 +21,7 @@ def main():
     argparser.add_argument("--max-epochs", default=10, type=int)
     argparser.add_argument("--num-workers", default=0, type=int)
     argparser.add_argument("--auto-lr-find", default=False, action="store_true")
+    argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     args = argparser.parse_args()
 
     model, input_size = models.MODELS[args.base_model]
