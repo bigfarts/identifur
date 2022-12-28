@@ -42,7 +42,6 @@ def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
     argparser.add_argument("--base-model", default="vit_l_16")
-    argparser.add_argument("--dataset-path", default="./dataset")
     argparser.add_argument("--labels-path", default="labels")
     argparser.add_argument("--random-split-seed", default=42, type=int)
     argparser.add_argument("--batch-size", default=64, type=int)
@@ -58,15 +57,17 @@ def main():
     model, input_size = models.MODELS[args.base_model]
 
     db = sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True)
-
     labels = load_tags(db, args.tag_min_post_count) + [f"rating: {r}" for r in "sqe"]
     with open(args.labels_path, "wt", encoding="utf-8") as f:
         for label in labels:
             f.write(label)
             f.write("\n")
 
-    # TODO: not this
-    ds = datasets.load_from_disk(args.dataset_path)[datasets.Split.TRAIN]
+    ds = datasets.load_dataset(
+        "hf/e621.py",
+        data_db_path=args.data_db,
+        split="train",
+    )
 
     dm = E621DataModule(
         dataset=ds,

@@ -26,20 +26,18 @@ def format_split_id(sid):
 _NUM_SHARDS = 1024
 
 
-class E621Dataset(datasets.GeneratorBasedBuilder):
+class E621Config(datasets.BuilderConfig):
     def __init__(
-        self,
-        *args,
-        writer_batch_size=None,
-        db_path,
-        images_path="images",
-        dls_db_path="dls.db",
-        **kwargs,
+        self, data_db_path, images_path="images", dls_db_path="dls.db", **kwargs
     ):
-        super().__init__(*args, writer_batch_size=writer_batch_size, **kwargs)
-        self.db_path = db_path
+        super().__init__(version=datasets.Version("1.0.0"), **kwargs)
+        self.data_db_path = data_db_path
         self.images_path = images_path
         self.dls_db_path = dls_db_path
+
+
+class E621Dataset(datasets.GeneratorBasedBuilder):
+    BUILDER_CONFIG_CLASS = E621Config
 
     def _info(self):
         return datasets.DatasetInfo(
@@ -72,8 +70,10 @@ Note that this dataset excludes images that are, at the time of scraping:
 
     def _generate_examples(self, shard_ids):
         shard_ids = set(shard_ids)
-        db = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
-        db.execute("ATTACH DATABASE ? AS dls", [f"file:{self.dls_db_path}?mode=ro"])
+        db = sqlite3.connect(f"file:{self.config.data_db_path}?mode=ro", uri=True)
+        db.execute(
+            "ATTACH DATABASE ? AS dls", [f"file:{self.config.dls_db_path}?mode=ro"]
+        )
 
         with contextlib.closing(db.cursor()) as cur:
             cur.execute(
@@ -88,7 +88,7 @@ Note that this dataset excludes images that are, at the time of scraping:
 
                 fsid = format_split_id(split_id(id))
                 try:
-                    with open(os.path.join(self.images_path, *fsid), "rb") as f:
+                    with open(os.path.join(self.config.images_path, *fsid), "rb") as f:
                         buf = f.read()
                 except Exception:
                     logging.exception("failed to load image %s", id)

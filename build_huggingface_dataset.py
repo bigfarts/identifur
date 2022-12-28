@@ -28,9 +28,7 @@ if __name__ == "__main__":
         "./hf/e621.py",
         name=date,
         num_proc=args.num_processes,
-        db_path=args.data_db,
-        dls_db_path=args.dls_db,
-        images_path=args.images_path,
+        data_db_path=args.data_db,
         writer_batch_size=args.writer_batch_size,
     )
 
