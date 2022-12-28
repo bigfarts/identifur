@@ -68,10 +68,7 @@ class E621Dataset(Dataset):
 
     def image_for_id(self, id):
         fsid = format_split_id(split_id(id))
-        return Image.open(
-            os.path.join(self.dataset_path, *fsid),
-            formats=["JPEG", "PNG"],
-        ).convert("RGB")
+        return Image.open(os.path.join(self.dataset_path, *fsid)).convert("RGB")
 
     def __len__(self):
         return len(self._index)
