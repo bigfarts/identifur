@@ -1,5 +1,5 @@
 /.vscode
-/dataset
+/files
 /models
 *.log
 *.db
@@ -7,3 +7,4 @@
 __pycache__
 test.png
 /lightning_logs
+/tags

@@ -140,7 +140,7 @@ async def main():
         "--rebuild-selected-table", default=False, action="store_true"
     )
     argparser.add_argument("--num-workers", default=16, type=int)
-    argparser.add_argument("--output-path", default="dataset")
+    argparser.add_argument("--output-path", default="images")
     argparser.add_argument("--fetch-full-image", default=False, action="store_true")
     argparser.add_argument("--fetch-pending", default=False, action="store_true")
     argparser.add_argument("--blacklisted-tags", default="loli,shota")
