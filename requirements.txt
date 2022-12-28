@@ -1,0 +1,8 @@
+pytorch_lightning
+torchmetrics
+aiohttp
+pytorch
+numpy
+pillow
+torchvision
+tqdm
