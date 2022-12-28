@@ -85,7 +85,7 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
                     continue
 
                 yield id, {
-                    "image": {"path": fsid[-1], "bytes": buf},
+                    "image": {"bytes": buf},
                     "tags": tag_string.split(" "),
                     "rating": rating,
                 }
