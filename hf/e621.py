@@ -26,6 +26,8 @@ def format_split_id(sid):
 
 _NUM_SHARDS = 1024
 
+_RATINGS = "sqe"
+
 
 class E621Config(datasets.BuilderConfig):
     def __init__(
@@ -50,8 +52,8 @@ This includes the following additional metadata:
 - post ID
 - created at
 - updated at
-- tags
-- rating
+- tags (stored as IDs you can cross-reference from an e621 tags dump)
+- rating (0 = safe, 1 = questionable, 2 = explicit)
 - favorite count
 - comment count
 - up score
@@ -63,12 +65,12 @@ Note that this dataset excludes images that are, at the time of scraping:
 """,
             features=datasets.Features(
                 {
-                    "id": datasets.Value("uint64"),
+                    "id": datasets.Value("uint32"),
                     "created_at": datasets.Value("timestamp[us]"),
                     "updated_at": datasets.Value("timestamp[us]"),
                     "image": datasets.Image(),
-                    "tags": datasets.features.Sequence(datasets.Value("string")),
-                    "rating": datasets.Value("string"),
+                    "tags": datasets.features.Sequence(datasets.Value("uint32")),
+                    "rating": datasets.Value("uint8"),
                     "fav_count": datasets.Value("uint32"),
                     "comment_count": datasets.Value("uint32"),
                     "up_score": datasets.Value("int32"),
@@ -90,6 +92,11 @@ Note that this dataset excludes images that are, at the time of scraping:
     def _generate_examples(self, shard_ids):
         shard_ids = set(shard_ids)
         db = sqlite3.connect(f"file:{self.config.data_db_path}?mode=ro", uri=True)
+
+        with contextlib.closing(db.cursor()) as cur:
+            cur.execute("SELECT id, name FROM tags")
+            tag_ids = {name: id for id, name in cur}
+
         db.execute(
             "ATTACH DATABASE ? AS dls", [f"file:{self.config.dls_db_path}?mode=ro"]
         )
@@ -139,8 +146,8 @@ Note that this dataset excludes images that are, at the time of scraping:
                     "created_at": created_at,
                     "updated_at": updated_at,
                     "image": {"bytes": buf},
-                    "tags": tag_string.split(" "),
-                    "rating": rating,
+                    "tags": [tag_ids[tag] for tag in tag_string.split(" ")],
+                    "rating": _RATINGS.index(rating),
                     "fav_count": fav_count,
                     "comment_count": comment_count,
                     "up_score": up_score,
