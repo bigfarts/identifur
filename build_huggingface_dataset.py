@@ -10,7 +10,7 @@ if __name__ == "__main__":
     argparser.add_argument("--date", default=None)
     argparser.add_argument("--hub-repo-id", default=None)
     argparser.add_argument("--num-processes", default=1, type=int)
-    argparser.add_argument("--writer-batch-size", default=20000, type=int)
+    argparser.add_argument("--writer-batch-size", default=None, type=int)
     args = argparser.parse_args()
 
     date = args.date
