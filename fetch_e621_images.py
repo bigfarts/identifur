@@ -56,7 +56,7 @@ async def fetch(session, stats, output_path, db, data_db, id, fetch_full_image):
         )
 
     if resp.status == 404:
-        logging.warn("%d not found, skipping", id)
+        logging.warning("%d not found, skipping", id)
         with db:
             db.execute("INSERT INTO visited(post_id) VALUES(?)", [id])
         return
