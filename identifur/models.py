@@ -44,12 +44,12 @@ MODELS = {
 
 
 class LitModel(pl.LightningModule):
-    def __init__(self, model, labels, lr=2e-4, weights=None, requires_grad=False):
+    def __init__(self, model, num_labels, lr=2e-4, weights=None, requires_grad=False):
         super().__init__()
-        self.model = model(weights, len(labels), requires_grad)
+        self.model = model(weights, num_labels, requires_grad)
         self.lr = lr
         self.criterion = nn.BCEWithLogitsLoss()
-        self.accuracy = Accuracy(task="multilabel", num_labels=len(labels))
+        self.accuracy = Accuracy(task="multilabel", num_labels=num_labels)
 
     def forward(self, x):
         return self.model(x)

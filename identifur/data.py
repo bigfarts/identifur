@@ -6,8 +6,8 @@ from torchvision import transforms
 
 
 class E621Dataset(Dataset):
-    def __init__(self, labels, dataset):
-        self.labels = labels
+    def __init__(self, tags, dataset):
+        self.tags = tags
         self.dataset = dataset
 
     def __len__(self):
@@ -16,13 +16,13 @@ class E621Dataset(Dataset):
     def __getitem__(self, i):
         row = self.dataset[i]
 
-        labels = set(row["tags"])
-        labels.add(f"rating: {row['rating']}")
+        tags_set = set(row["tags"])
 
         return (
             row["image"].convert("RGB"),
             torch.tensor(
-                [1.0 if label in labels else 0.0 for label in self.labels],
+                [1.0 if id in tags_set else 0.0 for id, _ in self.tags]
+                + [1.0 if row["rating"] == i else 0.0 for i in range(3)],
                 dtype=torch.float32,
             ),
         )
@@ -63,7 +63,7 @@ class SafeDataset(Dataset):
 class E621DataModule(pl.LightningDataModule):
     def __init__(
         self,
-        labels,
+        tags,
         dataset,
         batch_size=32,
         splits=(0.6, 0.2, 0.2),
@@ -72,7 +72,7 @@ class E621DataModule(pl.LightningDataModule):
         num_workers=0,
     ):
         super().__init__()
-        self.labels = labels
+        self.tags = tags
         self.dataset = dataset
         self.batch_size = batch_size
         self.splits = splits
@@ -81,7 +81,7 @@ class E621DataModule(pl.LightningDataModule):
         self.num_workers = num_workers
 
     def setup(self, stage=None):
-        ds = SafeDataset(E621Dataset(self.labels, self.dataset))
+        ds = SafeDataset(E621Dataset(self.tags, self.dataset))
 
         self.train, self.val, self.test = random_split(
             ds,

@@ -23,7 +23,7 @@ if __name__ == "__main__":
         repo_id = f"{api.whoami()['name']}/e621_{date}"
 
     ds = datasets.load_dataset(
-        "./hf/e621.py",
+        "./hf/e621_samples.py",
         name=date,
         num_proc=args.num_processes,
         data_db_path=args.data_db,

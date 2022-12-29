@@ -26,7 +26,7 @@ class Category(enum.Enum):
 def load_tags(db, min_post_count):
     with contextlib.closing(db.cursor()) as cur:
         cur.execute(
-            "SELECT name FROM tags WHERE post_count >= ? AND category IN (?, ?, ?, ?)",
+            "SELECT id, name FROM tags WHERE post_count >= ? AND category IN (?, ?, ?, ?)",
             [
                 min_post_count,
                 Category.GENERAL.value,
@@ -35,14 +35,14 @@ def load_tags(db, min_post_count):
                 Category.SPECIES.value,
             ],
         )
-        return [name for name, in cur]
+        return list(cur)
 
 
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
     argparser.add_argument("--base-model", default="vit_l_16")
-    argparser.add_argument("--labels-path", default="labels")
+    argparser.add_argument("--tags-path", default="tags")
     argparser.add_argument("--random-split-seed", default=42, type=int)
     argparser.add_argument("--batch-size", default=64, type=int)
     argparser.add_argument("--train-data-split", default=0.6, type=float)
@@ -57,21 +57,21 @@ def main():
     model, input_size = models.MODELS[args.base_model]
 
     db = sqlite3.connect(f"file:{args.data_db}?mode=ro", uri=True)
-    labels = load_tags(db, args.tag_min_post_count) + [f"rating: {r}" for r in "sqe"]
-    with open(args.labels_path, "wt", encoding="utf-8") as f:
-        for label in labels:
-            f.write(label)
+    tags = load_tags(db, args.tag_min_post_count)
+    with open(args.tags_path, "wt", encoding="utf-8") as f:
+        for _, name in tags:
+            f.write(name)
             f.write("\n")
 
     ds = datasets.load_dataset(
-        "hf/e621.py",
+        "hf/e621_samples.py",
         data_db_path=args.data_db,
         split="train",
     )
 
     dm = E621DataModule(
         dataset=ds,
-        labels=labels,
+        tags=tags,
         batch_size=args.batch_size,
         splits=[
             args.train_data_split,
@@ -84,7 +84,10 @@ def main():
     )
 
     model = models.LitModel(
-        model=model, weights="DEFAULT", labels=labels, requires_grad=False
+        model=model,
+        weights="DEFAULT",
+        num_labels=len(tags) + 3,
+        requires_grad=False,
     )
 
     trainer = pl.Trainer(
