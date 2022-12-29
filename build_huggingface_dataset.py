@@ -31,4 +31,4 @@ if __name__ == "__main__":
     )
 
     # ds.save_to_disk("dataset")
-    ds.push_to_hub(repo_id, private=True)
+    ds.push_to_hub(repo_id, private=True, max_shard_size="10GB")
