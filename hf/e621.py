@@ -45,6 +45,15 @@ class E621Dataset(datasets.GeneratorBasedBuilder):
             description="""
 All images of all ratings from e621.net from the date it was generated, at sample resolution where possible.
 
+This includes the following additional metadata:
+- post ID
+- tags
+- rating
+- favorite count
+- comment count
+- up score
+- down score
+
 Note that this dataset excludes images that are, at the time of scraping:
 - pending
 - tagged with tags indicating that it is illegal to possess in most jurisdictions
@@ -55,6 +64,10 @@ Note that this dataset excludes images that are, at the time of scraping:
                     "image": datasets.Image(),
                     "tags": datasets.features.Sequence(datasets.Value("string")),
                     "rating": datasets.Value("string"),
+                    "fav_count": datasets.Value("uint32"),
+                    "comment_count": datasets.Value("uint32"),
+                    "up_score": datasets.Value("int32"),
+                    "down_score": datasets.Value("int32"),
                 }
             ),
         )
@@ -78,9 +91,17 @@ Note that this dataset excludes images that are, at the time of scraping:
 
         with contextlib.closing(db.cursor()) as cur:
             cur.execute(
-                "SELECT posts.id, posts.tag_string, posts.rating FROM dls.downloaded INNER JOIN posts ON dls.downloaded.post_id = posts.id"
+                "SELECT posts.id, posts.tag_string, posts.rating, posts.fav_count, posts.comment_count, posts.up_score, posts.down_score FROM dls.downloaded INNER JOIN posts ON dls.downloaded.post_id = posts.id"
             )
-            for id, tag_string, rating in cur:
+            for (
+                id,
+                tag_string,
+                rating,
+                fav_count,
+                comment_count,
+                up_score,
+                down_score,
+            ) in cur:
                 if (
                     len(shard_ids) != _NUM_SHARDS
                     and mmh3.hash(struct.pack(">Q", id)) % _NUM_SHARDS not in shard_ids
@@ -100,4 +121,8 @@ Note that this dataset excludes images that are, at the time of scraping:
                     "image": {"bytes": buf},
                     "tags": tag_string.split(" "),
                     "rating": rating,
+                    "fav_count": fav_count,
+                    "comment_count": comment_count,
+                    "up_score": up_score,
+                    "down_score": down_score,
                 }

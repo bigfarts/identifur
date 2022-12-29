@@ -1,6 +1,5 @@
 import logging
 import torch
-import os
 from torch.utils.data import Dataset, DataLoader, random_split
 import pytorch_lightning as pl
 from torchvision import transforms
