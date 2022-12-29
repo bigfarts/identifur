@@ -29,6 +29,13 @@ _NUM_SHARDS = 1024
 _RATINGS = "sqe"
 
 
+def _parse_time(s):
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        return datetime.datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+
 class E621Config(datasets.BuilderConfig):
     def __init__(
         self, data_db_path, images_path="images", dls_db_path="dls.db", **kwargs
@@ -121,16 +128,8 @@ Note that this dataset excludes images that are, at the time of scraping:
                 ):
                     continue
 
-                created_at = (
-                    datetime.datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S.%f")
-                    if created_at
-                    else None
-                )
-                updated_at = (
-                    datetime.datetime.strptime(updated_at, "%Y-%m-%d %H:%M:%S.%f")
-                    if updated_at
-                    else None
-                )
+                created_at = _parse_time(created_at) if created_at else None
+                updated_at = _parse_time(updated_at) if updated_at else None
 
                 fsid = format_split_id(split_id(id))
                 try:
