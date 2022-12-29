@@ -7,5 +7,5 @@
 __pycache__
 test.png
 /lightning_logs
-/labels
+/tags
 /dataset
