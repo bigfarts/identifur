@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import struct
 import logging
 import os
@@ -47,6 +48,8 @@ All images of all ratings from e621.net from the date it was generated, at sampl
 
 This includes the following additional metadata:
 - post ID
+- created at
+- updated at
 - tags
 - rating
 - favorite count
@@ -61,6 +64,8 @@ Note that this dataset excludes images that are, at the time of scraping:
             features=datasets.Features(
                 {
                     "id": datasets.Value("uint64"),
+                    "created_at": datasets.Value("timestamp[us]"),
+                    "updated_at": datasets.Value("timestamp[us]"),
                     "image": datasets.Image(),
                     "tags": datasets.features.Sequence(datasets.Value("string")),
                     "rating": datasets.Value("string"),
@@ -91,10 +96,12 @@ Note that this dataset excludes images that are, at the time of scraping:
 
         with contextlib.closing(db.cursor()) as cur:
             cur.execute(
-                "SELECT posts.id, posts.tag_string, posts.rating, posts.fav_count, posts.comment_count, posts.up_score, posts.down_score FROM dls.downloaded INNER JOIN posts ON dls.downloaded.post_id = posts.id"
+                "SELECT posts.id, posts.created_at, posts.updated_at, posts.tag_string, posts.rating, posts.fav_count, posts.comment_count, posts.up_score, posts.down_score FROM dls.downloaded INNER JOIN posts ON dls.downloaded.post_id = posts.id"
             )
             for (
                 id,
+                created_at,
+                updated_at,
                 tag_string,
                 rating,
                 fav_count,
@@ -108,6 +115,17 @@ Note that this dataset excludes images that are, at the time of scraping:
                 ):
                     continue
 
+                created_at = (
+                    datetime.datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S.%f")
+                    if created_at
+                    else None
+                )
+                updated_at = (
+                    datetime.datetime.strptime(updated_at, "%Y-%m-%d %H:%M:%S.%f")
+                    if updated_at
+                    else None
+                )
+
                 fsid = format_split_id(split_id(id))
                 try:
                     with open(os.path.join(self.config.images_path, *fsid), "rb") as f:
@@ -118,6 +136,8 @@ Note that this dataset excludes images that are, at the time of scraping:
 
                 yield id, {
                     "id": id,
+                    "created_at": created_at,
+                    "updated_at": updated_at,
                     "image": {"bytes": buf},
                     "tags": tag_string.split(" "),
                     "rating": rating,

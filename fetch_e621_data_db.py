@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS posts
     , comment_count INTEGER NOT NULL
     , description TEXT NOT NULL
     , duration REAL
-    , updated_at TEXT NOT NULL
+    , updated_at TEXT
     , is_deleted INTEGER NOT NULL  -- actually bool
     , is_pending INTEGER NOT NULL  -- actually bool
     , is_flagged INTEGER NOT NULL  -- actually bool
@@ -84,7 +84,7 @@ def fetch_posts(db, date):
             comment_count = int(row["comment_count"])
             description = row["description"]
             duration = float(row["duration"]) if row["duration"] else None
-            updated_at = row["updated_at"]
+            updated_at = row["updated_at"] if row["updated_at"] else None
             is_deleted = row["is_deleted"] == "t"
             is_pending = row["is_pending"] == "t"
             is_flagged = row["is_flagged"] == "t"
