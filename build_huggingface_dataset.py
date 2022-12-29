@@ -28,7 +28,7 @@ if __name__ == "__main__":
         num_proc=args.num_processes,
         data_db_path=args.data_db,
         writer_batch_size=args.writer_batch_size,
-        split="train",
+        split=datasets.Split.TRAIN,
     )
 
     # ds.save_to_disk("dataset")
