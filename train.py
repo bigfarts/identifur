@@ -63,11 +63,7 @@ def main():
             f.write(name)
             f.write("\n")
 
-    ds = datasets.load_dataset(
-        "hf/e621_samples.py",
-        data_db_path=args.data_db,
-        split="train",
-    )
+    ds = datasets.load_dataset("hf/e621_samples.py", data_db_path=args.data_db)
 
     dm = E621DataModule(
         dataset=ds,
