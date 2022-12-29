@@ -20,7 +20,7 @@ if __name__ == "__main__":
     repo_id = args.hub_repo_id
     if repo_id is None:
         api = huggingface_hub.HfApi()
-        repo_id = f"{api.whoami()['name']}/e621_{date}"
+        repo_id = f"{api.whoami()['name']}/e621_samples_{date}"
 
     ds = datasets.load_dataset(
         "./hf/e621_samples.py",
