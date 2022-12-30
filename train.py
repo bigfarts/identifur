@@ -52,7 +52,7 @@ def main():
     argparser.add_argument("--test-data-split", default=0.2, type=float)
     argparser.add_argument("--max-epochs", default=10, type=int)
     argparser.add_argument("--num-workers", default=0, type=int)
-    argparser.add_argument("--auto-lr-find", default=False, action="store_true")
+    argparser.add_argument("--disable-auto-lr-find", default=False, action="store_true")
     argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     args = argparser.parse_args()
 
@@ -91,7 +91,7 @@ def main():
     )
 
     trainer = pl.Trainer(
-        auto_lr_find=args.auto_lr_find,
+        auto_lr_find=not args.disable_auto_lr_find,
         max_epochs=args.max_epochs,
         accelerator="gpu",
     )
