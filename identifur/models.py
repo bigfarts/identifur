@@ -44,7 +44,7 @@ MODELS = {
 
 
 class LitModel(pl.LightningModule):
-    def __init__(self, model, num_labels, lr=2e-4, weights=None, requires_grad=False):
+    def __init__(self, model, num_labels, lr=1e-4, weights=None, requires_grad=False):
         super().__init__()
         self.model = model(weights, num_labels, requires_grad)
         self.lr = lr
