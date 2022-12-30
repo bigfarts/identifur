@@ -64,7 +64,7 @@ def main():
             f.write(name)
             f.write("\n")
 
-    ds = datasets.load_dataset(args.dataset_name)
+    ds = datasets.load_dataset(args.dataset_name, split="train")
 
     dm = E621DataModule(
         dataset=ds,
