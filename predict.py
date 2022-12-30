@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 import numpy as np
 import argparse
 from PIL import Image
@@ -10,12 +11,12 @@ from identifur import models
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("checkpoint")
-    argparser.add_argument("sample")
+    argparser.add_argument("--device", default="cuda")
     argparser.add_argument("--base-model", default="vit_l_16")
     argparser.add_argument("--tags-path", default="tags")
     args = argparser.parse_args()
 
-    device = torch.device("cuda")
+    device = torch.device(args.device)
 
     with open(args.tags_path, "rt", encoding="utf-8") as f:
         labels = [line.rstrip("\n") for line in f]
@@ -33,9 +34,12 @@ def main():
     model.freeze()
 
     y_pred = model(
-        transforms.ToTensor()(
-            transforms.Resize(input_size)(Image.open(args.sample).convert("RGB"))
-        )
+        transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Resize(input_size),
+            ]
+        )(Image.open(sys.stdin.buffer).convert("RGB"))
         .unsqueeze(0)
         .to(device),
     )
