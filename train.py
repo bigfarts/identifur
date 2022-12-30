@@ -42,6 +42,7 @@ def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
     argparser.add_argument("dataset_name")
+    argparser.add_argument("--dataset-revision", default=None)
     argparser.add_argument("--base-model", default="vit_l_16")
     argparser.add_argument("--tags-path", default="tags")
     argparser.add_argument("--random-split-seed", default=42, type=int)
@@ -64,7 +65,9 @@ def main():
             f.write(name)
             f.write("\n")
 
-    ds = datasets.load_dataset(args.dataset_name, split="train")
+    ds = datasets.load_dataset(
+        args.dataset_name, revision=args.dataset_revision, split="train"
+    )
 
     dm = E621DataModule(
         dataset=ds,
