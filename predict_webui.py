@@ -47,8 +47,8 @@ def _get_gradcam_settings(model):
     if isinstance(model, timm.models.vision_transformer.VisionTransformer):
         return [model.blocks[-1].norm1], functools.partial(
             vit_reshape_transform,
-            width=model.patch_embed.img_size[0] // model.patch_embed.patch_size[0],
-            height=model.patch_embed.img_size[1] // model.patch_embed.patch_size[1],
+            width=model.patch_embed.img_size[0] // model.patch_embed.patch_size[0],  # type: ignore
+            height=model.patch_embed.img_size[1] // model.patch_embed.patch_size[1],  # type: ignore
         )
 
     raise TypeError(type(model))

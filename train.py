@@ -67,7 +67,7 @@ def main():
             f.write(name)
             f.write("\n")
 
-    ds = datasets.load_dataset(
+    ds = datasets.load_dataset(  # type: ignore
         args.dataset_name, revision=args.dataset_revision, split="train"
     )
 

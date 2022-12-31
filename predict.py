@@ -49,7 +49,7 @@ def main():
                 transforms.Resize(input_size),
             ]
         )(_image_without_transparency(Image.open(sys.stdin.buffer)))
-        .unsqueeze(0)
+        .unsqueeze(0)  # type: ignore
         .to(device),
     )
     y_pred = torch.sigmoid(y_pred)
