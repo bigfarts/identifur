@@ -4,13 +4,15 @@ import torch
 from torch import optim, nn
 from torchmetrics.classification.accuracy import MultilabelAccuracy
 import pytorch_lightning as pl
+import itertools
 
 
 def _make_resnet_model(f):
-    def _model(weights, num_labels, requires_grad=False):
+    def _model(weights, num_labels, requires_grad=False, layers_to_freeze=6):
         model = f(weights=weights)
-        for param in model.parameters():
-            param.requires_grad = requires_grad
+        for child in itertools.islice(model.children(), layers_to_freeze):
+            for param in child.parameters():
+                param.requires_grad = requires_grad
         model.fc = nn.Linear(model.fc.in_features, num_labels)
         return model
 
