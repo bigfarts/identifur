@@ -55,6 +55,7 @@ def main():
     argparser.add_argument("--disable-auto-lr-find", default=False, action="store_true")
     argparser.add_argument("--learning-rate", default=1e-3, type=float)
     argparser.add_argument("--num-sanity-val-steps", default=2, type=int)
+    argparser.add_argument("--val-check-interval", default=1.0, type=float)
     argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     args = argparser.parse_args()
 
@@ -97,6 +98,7 @@ def main():
         auto_lr_find=not args.disable_auto_lr_find,
         max_epochs=args.max_epochs,
         num_sanity_val_steps=args.num_sanity_val_steps,
+        val_check_interval=args.val_check_interval,
         accelerator="gpu",
     )
     trainer.fit(model, dm)
