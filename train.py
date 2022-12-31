@@ -87,7 +87,7 @@ def main():
 
     model = models.LitModel(
         model=model,
-        weights="DEFAULT",
+        pretrained=True,
         num_labels=len(tags) + 3,
         lr=args.learning_rate,
         requires_grad=False,

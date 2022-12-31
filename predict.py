@@ -35,7 +35,7 @@ def main():
     model = models.LitModel.load_from_checkpoint(
         args.checkpoint,
         model=model,
-        weights=None,
+        pretrained=False,
         num_labels=len(labels),
         requires_grad=False,
     ).to(device)

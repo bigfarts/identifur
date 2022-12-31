@@ -8,8 +8,8 @@ import itertools
 
 
 def _make_resnet_model(f):
-    def _model(weights, num_labels, requires_grad=False, layers_to_freeze=6):
-        model = f(weights=weights)
+    def _model(pretrained, num_labels, requires_grad=False, layers_to_freeze=6):
+        model = f(weights="DEFAULT" if pretrained else None)
         for child in itertools.islice(model.children(), layers_to_freeze):
             for param in child.parameters():
                 param.requires_grad = requires_grad
@@ -20,8 +20,8 @@ def _make_resnet_model(f):
 
 
 def _make_vit_model(f):
-    def _model(weights, num_labels, requires_grad=False):
-        model = f(weights=weights)
+    def _model(pretrained, num_labels, requires_grad=False):
+        model = f(weights="DEFAULT" if pretrained else None)
         for param in model.parameters():
             param.requires_grad = requires_grad
         model.heads = nn.Sequential(
@@ -36,12 +36,27 @@ def _make_vit_model(f):
     return _model
 
 
+def _make_deit_model(name):
+    def _model(pretrained, num_labels, requires_grad=False):
+        model = torch.hub.load(
+            "facebookresearch/deit:main", "deit_base_patch16_224", pretrained=pretrained
+        )
+        for param in model.parameters():
+            param.requires_grad = requires_grad
+        model.head = nn.Linear(model.head.in_features, num_labels)
+        return model
+
+    return _model
+
+
 MODELS = {
     "resnet152": (_make_resnet_model(models.resnet152), (224, 224)),
     "vit_b_16": (_make_vit_model(models.vit_b_16), (224, 224)),
     "vit_b_32": (_make_vit_model(models.vit_b_32), (224, 224)),
     "vit_l_16": (_make_vit_model(models.vit_l_16), (224, 224)),
     "vit_l_32": (_make_vit_model(models.vit_l_32), (224, 224)),
+    "deit_base_patch16_224": (_make_deit_model("deit_base_patch16_224"), (224, 224)),
+    "deit_base_patch16_384": (_make_deit_model("deit_base_patch16_384"), (384, 224)),
 }
 
 

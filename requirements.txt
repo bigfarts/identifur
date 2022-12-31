@@ -10,3 +10,4 @@ humanfriendly
 huggingface_hub
 datasets
 mmh3
+timm
