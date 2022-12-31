@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import traceback
-import collections
 import functools
 import numpy as np
 import markupsafe
