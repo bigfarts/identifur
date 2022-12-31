@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import traceback
+import collections
 import functools
 import numpy as np
 import markupsafe
@@ -122,11 +123,16 @@ _GRADCAM_SCRIPT = r"""
 """
 
 
-def _image_without_transparency(img):
-    img.load()
-    img2 = Image.new("RGB", img.size, (255, 255, 255))
-    img2.paste(img, mask=img.split()[3])
-    return img2
+def _image_without_transparency(img: Image.Image):
+    if img.mode == "RGB":
+        return img
+
+    if img.mode == "RGBA":
+        img2 = Image.new("RGB", img.size, (255, 255, 255))
+        img2.paste(img, mask=img.split()[3])
+        return img2
+
+    return img.convert("RGB")
 
 
 def create_app(device, predictor, input_size, cam):

@@ -6,11 +6,16 @@ from torchvision import transforms
 from PIL import Image
 
 
-def _image_without_transparency(img):
-    img.load()
-    img2 = Image.new("RGB", img.size, (255, 255, 255))
-    img2.paste(img, mask=img.split()[3])
-    return img2
+def _image_without_transparency(img: Image.Image):
+    if img.mode == "RGB":
+        return img
+
+    if img.mode == "RGBA":
+        img2 = Image.new("RGB", img.size, (255, 255, 255))
+        img2.paste(img, mask=img.split()[3])
+        return img2
+
+    return img.convert("RGB")
 
 
 class E621Dataset(Dataset):
