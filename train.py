@@ -53,6 +53,7 @@ def main():
     argparser.add_argument("--max-epochs", default=10, type=int)
     argparser.add_argument("--num-workers", default=0, type=int)
     argparser.add_argument("--disable-auto-lr-find", default=False, action="store_true")
+    argparser.add_argument("--learning-rate", default=1e-3, type=float)
     argparser.add_argument("--num-sanity-val-steps", default=2, type=int)
     argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     args = argparser.parse_args()
@@ -88,6 +89,7 @@ def main():
         model=model,
         weights="DEFAULT",
         num_labels=len(tags) + 3,
+        lr=args.learning_rate,
         requires_grad=False,
     )
 
