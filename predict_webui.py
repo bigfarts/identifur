@@ -124,9 +124,6 @@ _GRADCAM_SCRIPT = r"""
 
 
 def _image_without_transparency(img: Image.Image):
-    if img.mode == "RGB":
-        return img
-
     if img.mode == "RGBA":
         img2 = Image.new("RGB", img.size, (255, 255, 255))
         img2.paste(img, mask=img.split()[3])
