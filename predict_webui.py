@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import traceback
+import collections
+import functools
+import numpy as np
 import markupsafe
 import datetime
 import io
@@ -7,34 +11,39 @@ import logging
 import argparse
 from PIL import Image
 import torch
-from torchvision import transforms
+from torchvision import transforms, models as tv_models
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.image import show_cam_on_image
+from pytorch_grad_cam.utils.reshape_transforms import vit_reshape_transform
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from identifur import models
 import flask
 
 
 class Predictor:
-    def __init__(self, model, labels, input_size, device):
+    def __init__(self, model, labels):
         self.model = model
         self.labels = labels
-        self.input_size = input_size
-        self.device = device
 
     def predict(self, image):
-        y_pred = self.model(
-            transforms.Compose(
-                [
-                    transforms.ToTensor(),
-                    transforms.Resize(self.input_size),
-                ]
-            )(image.convert("RGB"))
-            .unsqueeze(0)
-            .to(self.device),
-        )
+        y_pred = self.model(image)
         y_pred = torch.sigmoid(y_pred)
         y_pred = y_pred.detach().cpu()
-        y_pred = y_pred[0]
+        return y_pred[0]
 
-        return {self.labels[i]: p for i, p in enumerate(y_pred)}
+
+def _get_gradcam_settings(model):
+    if isinstance(model, tv_models.ResNet):
+        return [model.layer4[-1]], lambda xs: xs
+
+    if isinstance(model, tv_models.VisionTransformer):
+        return [model.encoder.layers[-1].ln_1], functools.partial(
+            vit_reshape_transform,
+            width=model.image_size // model.patch_size,
+            height=model.image_size // model.patch_size,
+        )
+
+    raise TypeError(type(model))
 
 
 def main():
@@ -61,14 +70,21 @@ def main():
         model=model,
         weights=None,
         num_labels=len(labels),
-        requires_grad=False,
+        requires_grad=True,
     ).to(device)
     model.eval()
-    model.freeze()
+    # model.freeze()
 
-    predictor = Predictor(model, labels, input_size, device)
+    predictor = Predictor(model, labels)
+    target_layers, reshape_transform = _get_gradcam_settings(model.model)
+    cam = GradCAM(
+        model=model,
+        target_layers=target_layers,
+        reshape_transform=reshape_transform,
+        use_cuda=args.device == "cuda",
+    )
 
-    app = create_app(predictor)
+    app = create_app(device, predictor, input_size, cam)
     app.run(host=args.host, port=args.port)
 
 
@@ -80,8 +96,10 @@ _BASE_TEMPLATE = """
         <title>identifur</title>
     </head>
     <body>
-        <form method="POST" enctype="multipart/form-data" action="/">
+        <form method="POST" enctype="multipart/form-data" action="/" id="form">
             <input type="file" name="image" />
+            <input type="hidden" name="image_png_base64" value="" />
+            <input type="hidden" name="cam_target_label" value="" />
             <button type="submit">Predict</button>
         </form>
         {rest}
@@ -90,45 +108,123 @@ _BASE_TEMPLATE = """
 """
 
 
-def create_app(predictor):
+_GRADCAM_SCRIPT = r"""
+<script>
+    const form = document.getElementById("form");
+    const sample = document.getElementById("sample");
+    for (const button of document.querySelectorAll("button[data-gradcam-id]")) {
+        button.onclick = function () {
+            form.elements.cam_target_label.value = this.dataset.gradcamId;
+            form.elements.image_png_base64.value = sample.src.replace(/^data:image\/png;base64,/, '');
+            form.submit();
+        };
+    }
+</script>
+"""
+
+
+def _image_without_transparency(img):
+    img.load()
+    img2 = Image.new("RGB", img.size, (255, 255, 255))
+    img2.paste(img, mask=img.split()[3])
+    return img2
+
+
+def create_app(device, predictor, input_size, cam):
     app = flask.Flask(__name__)
 
     @app.route("/", methods=["GET"])
     def index():
-        return _BASE_TEMPLATE.format(rest="")
+        return _BASE_TEMPLATE.format(
+            rest="",
+        )
 
     @app.route("/", methods=["POST"])
     def predict():
         def _inner():
-            img = flask.request.files.get("image")
-            if img is None:
-                return "<p>No image supplied.</p>"
-
             try:
-                img_data = img.stream.read()
-                img = Image.open(io.BytesIO(img_data))
+                image_png_base64 = flask.request.form.get("image_png_base64", "")
+                if image_png_base64:
+                    img = Image.open(
+                        io.BytesIO(base64.b64decode(image_png_base64)), formats=["PNG"]
+                    )
+                elif "image" in flask.request.files:
+                    img = _image_without_transparency(
+                        Image.open(
+                            io.BytesIO(flask.request.files["image"].stream.read())
+                        )
+                    )
+                else:
+                    return "<p>No image supplied.</p>"
+
+                cam_target_label = flask.request.form.get("cam_target_label", "")
+                if cam_target_label:
+                    cam_target_label = int(cam_target_label)
+                else:
+                    cam_target_label = None
+
+                input_img = transforms.Resize(input_size)(img)
+                input_img_tensor = (
+                    transforms.ToTensor()(input_img).unsqueeze(0).to(device)
+                )
+
+                img_buf = io.BytesIO()
+                img.save(img_buf, format="PNG")
+
+                if cam_target_label is not None:
+                    grayscale_cam = (
+                        np.asarray(
+                            transforms.ToPILImage()(
+                                cam(
+                                    input_tensor=input_img_tensor,
+                                    targets=[ClassifierOutputTarget(cam_target_label)],
+                                ).reshape(input_size)
+                                * 255
+                            ).convert("L")
+                        )
+                        / 255.0
+                    )
+
+                    img2 = Image.fromarray(
+                        show_cam_on_image(
+                            np.asarray(input_img) / 255.0,
+                            grayscale_cam,
+                            use_rgb=True,
+                        )
+                    )
+                    img2_buf = io.BytesIO()
+                    img2.save(img2_buf, format="PNG")
+                else:
+                    img2_buf = img_buf
 
                 start_time = datetime.datetime.now()
-                predictions = predictor.predict(img)
+                predictions = predictor.predict(input_img_tensor)
                 dur = datetime.datetime.now() - start_time
 
                 predictions = sorted(
-                    ((name, score) for name, score in predictions.items()),
-                    key=lambda kv: kv[1],
-                    reverse=True,
+                    enumerate(predictions), key=lambda kv: kv[1], reverse=True
                 )
                 table = []
                 table.append("<table>")
-                for name, score in predictions[:50]:
+                for id, score in predictions[:50]:
                     table.append(
-                        f"<tr><td>{markupsafe.escape(name)}</td><td>{score * 100:.5f}%</td></tr>"
+                        f"""<tr><td>{markupsafe.escape(predictor.labels[id])} ({id})</td><td>{score * 100:.5f}%</td><td><button type="button" data-gradcam-id="{id}">grad-cam</button></td></tr>"""
                     )
                 table.append("</table>")
-                return f"""<p><img src="data:{img.get_format_mimetype()};base64,{base64.b64encode(img_data).decode('utf-8')}" height="300"></p><p>prediction took {dur.total_seconds() * 100}ms.</p>{"".join(table)}"""
+                return f"""<p>
+    <img id="sample" src="data:image/png;base64,{base64.b64encode(img_buf.getvalue()).decode('utf-8')}" height="300">
+{f'<img id="gradcam" src="data:image/png;base64,{base64.b64encode(img2_buf.getvalue()).decode("utf-8")}" height="300">' if cam_target_label is not None else ''}
+</p>
+<p>{f'<strong>showing grad-cam label:</strong> {markupsafe.escape(predictor.labels[cam_target_label])}' if cam_target_label is not None else 'grad-cam off'}</p>
+<p>prediction took {dur.total_seconds() * 100}ms.</p>
+{"".join(table)}
+"""
             except Exception as e:
-                return f"<p>Error: {markupsafe.escape(e)}</p>"
+                return f"<pre>{markupsafe.escape(''.join(traceback.format_exception(e)))}</pre>"
 
-        return _BASE_TEMPLATE.format(rest=_inner())
+        return _BASE_TEMPLATE.format(
+            rest=_inner() + _GRADCAM_SCRIPT,
+        )
 
     return app
 

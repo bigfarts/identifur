@@ -8,6 +8,13 @@ from torchvision import transforms
 from identifur import models
 
 
+def _image_without_transparency(img):
+    img.load()
+    img2 = Image.new("RGB", img.size, (255, 255, 255))
+    img2.paste(img, mask=img.split()[3])
+    return img2
+
+
 def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("checkpoint")
@@ -39,7 +46,7 @@ def main():
                 transforms.ToTensor(),
                 transforms.Resize(input_size),
             ]
-        )(Image.open(sys.stdin.buffer).convert("RGB"))
+        )(_image_without_transparency(Image.open(sys.stdin.buffer)))
         .unsqueeze(0)
         .to(device),
     )

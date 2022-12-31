@@ -2,7 +2,7 @@ from collections import OrderedDict
 from torchvision import models
 import torch
 from torch import optim, nn
-from torchmetrics import Accuracy
+from torchmetrics.classification.accuracy import MultilabelAccuracy
 import pytorch_lightning as pl
 
 
@@ -49,7 +49,7 @@ class LitModel(pl.LightningModule):
         self.model = model(weights, num_labels, requires_grad)
         self.lr = lr
         self.criterion = nn.BCEWithLogitsLoss()
-        self.accuracy = Accuracy(task="multilabel", num_labels=num_labels)
+        self.accuracy = MultilabelAccuracy(num_labels=num_labels, threshold=0.8)
 
     def forward(self, x):
         return self.model(x)
