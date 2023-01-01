@@ -116,7 +116,7 @@ class E621DataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=True,
             persistent_workers=self.num_workers > 0,
-        )l
+        )
 
     def val_dataloader(self):
         return DataLoader(
