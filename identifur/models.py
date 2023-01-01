@@ -39,7 +39,7 @@ def _make_vit_model(f):
 
 
 def _make_convnext_model(f):
-    def _model(pretrained, num_labels, requires_grad=False, layers_to_freeze=2):
+    def _model(pretrained, num_labels, requires_grad=False, layers_to_freeze=4):
         model: models.ConvNeXt = f(weights="DEFAULT" if pretrained else None)
 
         for child in itertools.islice(model.features.children(), layers_to_freeze):
