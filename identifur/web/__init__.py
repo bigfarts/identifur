@@ -1,5 +1,4 @@
 from fastapi import FastAPI, UploadFile, Form, Response, HTTPException
-import multiprocessing
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
@@ -13,6 +12,7 @@ import argparse
 from PIL import Image
 import torch
 from torchvision import transforms, models as tv_models
+import torchvision.transforms.functional as F
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from pytorch_grad_cam.utils.reshape_transforms import vit_reshape_transform
@@ -23,11 +23,21 @@ import timm
 
 def _image_without_transparency(img: Image.Image):
     if img.mode == "RGBA":
-        img2 = Image.new("RGB", img.size, (255, 255, 255))
+        img2 = Image.new("RGB", img.size, (0, 0, 0))
         img2.paste(img, mask=img.split()[3])
         return img2
 
     return img.convert("RGB")
+
+
+class SquarePad:
+    def __call__(self, image):
+        w, h = image.size
+        max_wh = np.max([w, h])
+        hp = int((max_wh - w) / 2)
+        vp = int((max_wh - h) / 2)
+        padding = [hp, vp, hp, vp]
+        return F.pad(image, padding, 0, "constant")
 
 
 def _get_gradcam_settings(model):
@@ -159,7 +169,12 @@ def main():
 
         img = _image_without_transparency(Image.open(io.BytesIO(await file.read())))
 
-        input_img = transforms.Resize(input_size)(img)
+        input_img = transforms.Compose(
+            [
+                SquarePad(),
+                transforms.Resize(input_size),
+            ]
+        )(img)
         input_img_tensor = transforms.ToTensor()(input_img).unsqueeze(0).to(device)
 
         grayscale_cam = (

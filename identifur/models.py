@@ -5,6 +5,7 @@ from torch import optim, nn
 from torchmetrics.classification.accuracy import MultilabelAccuracy
 import pytorch_lightning as pl
 import itertools
+import timm
 
 
 def _make_resnet_model(f, layers_to_freeze=6):
@@ -24,8 +25,6 @@ def _make_resnet_model(f, layers_to_freeze=6):
 def _make_vit_model(f):
     def _model(pretrained, num_labels, requires_grad=False):
         model = f(weights="DEFAULT" if pretrained else None)
-        for param in model.parameters():
-            param.requires_grad = requires_grad
         model.heads = nn.Sequential(
             OrderedDict(
                 [
@@ -73,11 +72,9 @@ def _make_efficientnet_v2_model(f, layers_to_freeze=6):
 
 def _make_deit_model(name):
     def _model(pretrained, num_labels, requires_grad=False):
-        model = torch.hub.load(
+        model: timm.models.VisionTransformer = torch.hub.load(
             "facebookresearch/deit:main", "deit_base_patch16_224", pretrained=pretrained
         )
-        for param in model.parameters():
-            param.requires_grad = requires_grad
         model.head = nn.Linear(model.head.in_features, num_labels)
         return model
 
@@ -97,7 +94,7 @@ MODELS = {
     "vit_l_16": (_make_vit_model(models.vit_l_16), (224, 224)),
     "vit_l_32": (_make_vit_model(models.vit_l_32), (224, 224)),
     "deit_base_patch16_224": (_make_deit_model("deit_base_patch16_224"), (224, 224)),
-    "deit_base_patch16_384": (_make_deit_model("deit_base_patch16_384"), (384, 224)),
+    "deit_base_patch16_384": (_make_deit_model("deit_base_patch16_384"), (384, 384)),
 }
 
 

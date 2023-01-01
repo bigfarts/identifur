@@ -1,4 +1,6 @@
 import logging
+import torchvision.transforms.functional as F
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split
 import pytorch_lightning as pl
@@ -8,7 +10,7 @@ from PIL import Image
 
 def _image_without_transparency(img: Image.Image):
     if img.mode == "RGBA":
-        img2 = Image.new("RGB", img.size, (255, 255, 255))
+        img2 = Image.new("RGB", img.size, (0, 0, 0))
         img2.paste(img, mask=img.split()[3])
         return img2
 
@@ -36,6 +38,16 @@ class E621Dataset(Dataset):
                 dtype=torch.float32,
             ),
         )
+
+
+class SquarePad:
+    def __call__(self, image):
+        w, h = image.size
+        max_wh = np.max([w, h])
+        hp = int((max_wh - w) / 2)
+        vp = int((max_wh - h) / 2)
+        padding = [hp, vp, hp, vp]
+        return F.pad(image, padding, 0, "constant")
 
 
 class TransformingDataset(Dataset):
@@ -105,6 +117,7 @@ class E621DataModule(pl.LightningDataModule):
                 self.train,
                 transforms.Compose(
                     [
+                        SquarePad(),
                         transforms.Resize(self.input_size),
                         transforms.RandomHorizontalFlip(p=0.5),
                         transforms.RandomRotation(degrees=180),
@@ -124,6 +137,7 @@ class E621DataModule(pl.LightningDataModule):
                 self.val,
                 transforms.Compose(
                     [
+                        SquarePad(),
                         transforms.Resize(self.input_size),
                         transforms.ToTensor(),
                     ]
@@ -140,6 +154,7 @@ class E621DataModule(pl.LightningDataModule):
                 self.val,
                 transforms.Compose(
                     [
+                        SquarePad(),
                         transforms.Resize(self.input_size),
                         transforms.ToTensor(),
                     ]
