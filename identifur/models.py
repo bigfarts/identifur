@@ -73,7 +73,7 @@ def _make_efficientnet_v2_model(f, layers_to_freeze=6):
 def _make_deit_model(name):
     def _model(pretrained, num_labels, requires_grad=False):
         model: timm.models.VisionTransformer = torch.hub.load(
-            "facebookresearch/deit:main", "deit_base_patch16_224", pretrained=pretrained
+            "facebookresearch/deit:main", name, pretrained=pretrained
         )
         model.head = nn.Linear(model.head.in_features, num_labels)
         return model
@@ -93,8 +93,10 @@ MODELS = {
     "vit_b_32": (_make_vit_model(models.vit_b_32), (224, 224)),
     "vit_l_16": (_make_vit_model(models.vit_l_16), (224, 224)),
     "vit_l_32": (_make_vit_model(models.vit_l_32), (224, 224)),
-    "deit_base_patch16_224": (_make_deit_model("deit_base_patch16_224"), (224, 224)),
-    "deit_base_patch16_384": (_make_deit_model("deit_base_patch16_384"), (384, 384)),
+    "deit_base_distilled_patch16_384": (
+        _make_deit_model("deit_base_distilled_patch16_384"),
+        (384, 384),
+    ),
 }
 
 
