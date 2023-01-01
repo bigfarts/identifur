@@ -4,16 +4,14 @@ import torch
 from torch import optim, nn
 from torchmetrics.classification.accuracy import MultilabelAccuracy
 import pytorch_lightning as pl
+import itertools
 
 
 def _make_resnet_model(f):
-    def _model(pretrained, num_labels, requires_grad=False, layers_to_unfreeze=4):
+    def _model(pretrained, num_labels, requires_grad=False, layers_to_freeze=6):
         model = f(weights="DEFAULT" if pretrained else None)
 
-        children = list(model.children())
-        children.reverse()
-
-        for child in children[:layers_to_unfreeze]:
+        for child in itertools.islice(model.children(), layers_to_freeze):
             for param in child.parameters():
                 param.requires_grad = requires_grad
 
@@ -26,10 +24,8 @@ def _make_resnet_model(f):
 def _make_vit_model(f):
     def _model(pretrained, num_labels, requires_grad=False):
         model = f(weights="DEFAULT" if pretrained else None)
-
         for param in model.parameters():
             param.requires_grad = requires_grad
-
         model.heads = nn.Sequential(
             OrderedDict(
                 [
@@ -43,13 +39,10 @@ def _make_vit_model(f):
 
 
 def _make_convnext_model(f):
-    def _model(pretrained, num_labels, requires_grad=False, layers_to_unfreeze=6):
+    def _model(pretrained, num_labels, requires_grad=False, layers_to_freeze=6):
         model: models.ConvNeXt = f(weights="DEFAULT" if pretrained else None)
 
-        children = list(model.children())
-        children.reverse()
-
-        for child in children[:layers_to_unfreeze]:
+        for child in itertools.islice(model.features.children(), layers_to_freeze):
             for param in child.parameters():
                 param.requires_grad = requires_grad
 
