@@ -11,6 +11,8 @@ huggingface_hub
 datasets
 mmh3
 timm
-pytorch_grad_cam
+grad-cam
 flask
 markupsafe
+fastapi
+python-multipart
