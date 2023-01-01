@@ -56,7 +56,7 @@ def _make_convnext_model(f, layers_to_freeze=25):
     return _model
 
 
-def _make_efficientnet_v2_model(f, layers_to_freeze=4):
+def _make_efficientnet_v2_model(f, layers_to_freeze=6):
     def _model(pretrained, num_labels, requires_grad=False):
         model: models.EfficientNet = f(weights="DEFAULT" if pretrained else None)
 
