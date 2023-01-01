@@ -88,7 +88,7 @@ MODELS = {
     "resnet152": (_make_resnet_model(models.resnet152), (224, 224)),
     "convnext_large": (_make_convnext_model(models.convnext_large), (224, 224)),
     "convnext_base": (_make_convnext_model(models.convnext_base), (224, 224)),
-    "efficientnet_b7": (
+    "efficientnet_v2_l": (
         _make_efficientnet_v2_model(models.efficientnet_v2_l),
         (224, 224),
     ),
