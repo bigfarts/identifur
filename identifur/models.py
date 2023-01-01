@@ -56,6 +56,21 @@ def _make_convnext_model(f, layers_to_freeze=25):
     return _model
 
 
+def _make_efficientnet_v2_model(f, layers_to_freeze=4):
+    def _model(pretrained, num_labels, requires_grad=False):
+        model: models.EfficientNet = f(weights="DEFAULT" if pretrained else None)
+
+        for layer in itertools.islice(model.features, layers_to_freeze):
+            for param in layer.parameters():
+                param.requires_grad = requires_grad
+
+        fc: nn.Linear = model.classifier[-1]  # type: ignore
+        model.classifier[-1] = nn.Linear(fc.in_features, num_labels)
+        return model
+
+    return _model
+
+
 def _make_deit_model(name):
     def _model(pretrained, num_labels, requires_grad=False):
         model = torch.hub.load(
@@ -73,6 +88,10 @@ MODELS = {
     "resnet152": (_make_resnet_model(models.resnet152), (224, 224)),
     "convnext_large": (_make_convnext_model(models.convnext_large), (224, 224)),
     "convnext_base": (_make_convnext_model(models.convnext_base), (224, 224)),
+    "efficientnet_b7": (
+        _make_efficientnet_v2_model(models.efficientnet_v2_l),
+        (224, 224),
+    ),
     "vit_b_16": (_make_vit_model(models.vit_b_16), (224, 224)),
     "vit_b_32": (_make_vit_model(models.vit_b_32), (224, 224)),
     "vit_l_16": (_make_vit_model(models.vit_l_16), (224, 224)),

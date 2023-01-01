@@ -61,8 +61,10 @@ def _get_gradcam_settings(model):
         )
 
     if isinstance(model, tv_models.ConvNeXt):
-        cn_block: tv_models.convnext.CNBlock = model.features[-1][-1]  # type: ignore
-        return [cn_block.block[2]], lambda xs: xs
+        return [model.features[-1]], lambda xs: xs
+
+    if isinstance(model, tv_models.EfficientNet):
+        return [model.features[-1]], lambda xs: xs
 
     raise TypeError(type(model))
 
