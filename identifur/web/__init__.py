@@ -60,6 +60,10 @@ def _get_gradcam_settings(model):
             height=model.patch_embed.img_size[1] // model.patch_embed.patch_size[1],  # type: ignore
         )
 
+    if isinstance(model, tv_models.ConvNeXt):
+        cn_block: tv_models.convnext.CNBlock = model.features[-1][-1]  # type: ignore
+        return [cn_block.block[2]], lambda xs: xs
+
     raise TypeError(type(model))
 
 
