@@ -21,18 +21,6 @@ from identifur import models
 import timm
 
 
-class Predictor:
-    def __init__(self, model, labels):
-        self.model = model
-        self.labels = labels
-
-    def predict(self, image):
-        y_pred = self.model(image)
-        y_pred = torch.sigmoid(y_pred)
-        y_pred = y_pred.detach().cpu()
-        return y_pred[0]
-
-
 def _image_without_transparency(img: Image.Image):
     if img.mode == "RGBA":
         img2 = Image.new("RGB", img.size, (255, 255, 255))
@@ -84,22 +72,20 @@ def main():
     device = torch.device(args.device)
 
     with open(args.tags_path, "rt", encoding="utf-8") as f:
-        labels = [line.rstrip("\n") for line in f]
-    labels += ["rating: safe", "rating: questionable", "rating: explicit"]
-    label_ids = {label: i for i, label in enumerate(labels)}
+        tags = [line.rstrip("\n") for line in f]
+    tag_ids = {label: i for i, label in enumerate(tags)}
 
     (model, input_size) = models.MODELS[args.base_model]
     model = models.LitModel.load_from_checkpoint(
         args.checkpoint,
         model=model,
         pretrained=False,
-        num_labels=len(labels),
+        num_labels=len(tags) + 3,
         requires_grad=True,
     ).to(device)
     model.eval()
     # model.freeze()
 
-    predictor = Predictor(model, labels)
     target_layers, reshape_transform = _get_gradcam_settings(model.model)
     cam = GradCAM(
         model=model,
@@ -133,16 +119,27 @@ def main():
         input_img_tensor = transforms.ToTensor()(input_img).unsqueeze(0).to(device)
 
         start_time = datetime.datetime.now()
-        predictions = predictor.predict(input_img_tensor)
+        predictions = model(input_img_tensor).detach().cpu()[0]
         dur = datetime.datetime.now() - start_time
 
-        predictions = sorted(enumerate(predictions), key=lambda kv: kv[1], reverse=True)
+        predicted_tags = torch.sigmoid(predictions[:-3])
+        predicted_rating = torch.softmax(predictions[-3:], 0)
+
+        predicted_tags = sorted(
+            enumerate(predicted_tags), key=lambda kv: kv[1], reverse=True
+        )
 
         return {
-            "predictions": [
-                {"label": predictor.labels[id], "score": score.item()}
-                for id, score in predictions[:top]
+            "tags": [
+                {"name": tags[id], "score": score.item()}
+                for id, score in predicted_tags[:top]
             ],
+            "rating": {
+                name: p.item()
+                for name, p in zip(
+                    ["safe", "questionable", "explicit"], predicted_rating
+                )
+            },
             "elapsed_secs": dur.total_seconds(),
         }
 
@@ -153,12 +150,12 @@ def main():
     )
     async def gradcam(
         file: UploadFile,
-        label: str = Form(...),
+        tag: str = Form(...),
     ):
         try:
-            label_id = label_ids[label]
+            tag_id = tag_ids[tag]
         except KeyError:
-            raise HTTPException(status_code=400, detail="unknown label")
+            raise HTTPException(status_code=400, detail="unknown tag")
 
         img = _image_without_transparency(Image.open(io.BytesIO(await file.read())))
 
@@ -170,7 +167,7 @@ def main():
                 transforms.ToPILImage()(
                     cam(
                         input_tensor=input_img_tensor,
-                        targets=[ClassifierOutputTarget(label_id)],
+                        targets=[ClassifierOutputTarget(tag_id)],
                     ).reshape(input_size)
                     * 255
                 ).convert("L")

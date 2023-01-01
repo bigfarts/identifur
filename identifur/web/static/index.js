@@ -56,7 +56,7 @@ const App = () => {
                 })();
             }}
         />
-        <p>
+        <div>
             ${file != null
                 ? html`<div style=${{ display: "inline-block" }}>
                       <${FileImg} file=${file} height="300" />
@@ -66,21 +66,59 @@ const App = () => {
             ${gradcam != null
                 ? html`<div style=${{ display: "inline-block" }}>
                       <${FileImg} file=${gradcam.blob} height="300" />
-                      <div>${gradcam.label}</div>
+                      <div>${gradcam.tag}</div>
                   </div>`
                 : null}
-        </p>
+        </div>
         ${predictions != null
             ? html`<div>
                   <p>
                       prediction took${" "}
                       ${(predictions.elapsed_secs * 1000).toFixed(2)}ms.
                   </p>
+
+                  <h4>rating</h4>
                   <table>
                       <tbody>
-                          ${predictions.predictions.map(
-                              ({ label, score }) => html`<tr key=${label}>
-                                  <td>${label}</td>
+                          <tr>
+                              <td>safe</td>
+                              <td>
+                                  <tt>
+                                      ${(predictions.rating.safe * 100).toFixed(
+                                          4
+                                      )}%
+                                  </tt>
+                              </td>
+                          </tr>
+                          <tr>
+                              <td>questionable</td>
+                              <td>
+                                  <tt>
+                                      ${(
+                                          predictions.rating.questionable * 100
+                                      ).toFixed(4)}%
+                                  </tt>
+                              </td>
+                          </tr>
+                          <tr>
+                              <td>explicit</td>
+                              <td>
+                                  <tt>
+                                      ${(
+                                          predictions.rating.explicit * 100
+                                      ).toFixed(4)}%
+                                  </tt>
+                              </td>
+                          </tr>
+                      </tbody>
+                  </table>
+
+                  <h4>tags</h4>
+                  <table>
+                      <tbody>
+                          ${predictions.tags.map(
+                              ({ name, score }) => html`<tr key=${name}>
+                                  <td>${name}</td>
                                   <td><tt>${(score * 100).toFixed(4)}%</tt></td>
                                   <td>
                                       <button
@@ -94,10 +132,7 @@ const App = () => {
                                                       const data =
                                                           new FormData();
                                                       data.append("file", file);
-                                                      data.append(
-                                                          "label",
-                                                          label
-                                                      );
+                                                      data.append("tag", name);
 
                                                       const blob = await (
                                                           await fetch(
@@ -109,7 +144,7 @@ const App = () => {
                                                           )
                                                       ).blob();
                                                       setGradcam({
-                                                          label,
+                                                          tag: name,
                                                           blob,
                                                       });
                                                   } catch (e) {
