@@ -72,7 +72,10 @@ const App = () => {
         </p>
         ${predictions != null
             ? html`<div>
-                  <p>prediction took ${predictions.elapsed_secs * 1000}ms.</p>
+                  <p>
+                      prediction took
+                      ${(predictions.elapsed_secs * 1000).toFixed(2)}ms.
+                  </p>
                   <table>
                       <tbody>
                           ${predictions.predictions.map(
