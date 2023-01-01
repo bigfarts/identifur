@@ -119,7 +119,6 @@ def main():
     @app.post("/predict")
     async def predict(
         file: UploadFile,
-        cam_target_label: typing.Optional[str] = Form(None),
         top: int = Form(50),
     ):
         img = _image_without_transparency(Image.open(io.BytesIO(await file.read())))
