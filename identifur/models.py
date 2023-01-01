@@ -7,8 +7,8 @@ import pytorch_lightning as pl
 import itertools
 
 
-def _make_resnet_model(f):
-    def _model(pretrained, num_labels, requires_grad=False, layers_to_freeze=6):
+def _make_resnet_model(f, layers_to_freeze=6):
+    def _model(pretrained, num_labels, requires_grad=False):
         model = f(weights="DEFAULT" if pretrained else None)
 
         for child in itertools.islice(model.children(), layers_to_freeze):
@@ -38,12 +38,13 @@ def _make_vit_model(f):
     return _model
 
 
-def _make_convnext_model(f):
-    def _model(pretrained, num_labels, requires_grad=False, layers_to_freeze=25):
+def _make_convnext_model(f, layers_to_freeze=25):
+    def _model(pretrained, num_labels, requires_grad=False):
         model: models.ConvNeXt = f(weights="DEFAULT" if pretrained else None)
 
         for child in itertools.islice(
-            (layer for block in model.features for layer in block), layers_to_freeze
+            (layer for block in model.features for layer in block),
+            layers_to_freeze,
         ):
             for param in child.parameters():
                 param.requires_grad = requires_grad
@@ -71,6 +72,7 @@ def _make_deit_model(name):
 MODELS = {
     "resnet152": (_make_resnet_model(models.resnet152), (224, 224)),
     "convnext_large": (_make_convnext_model(models.convnext_large), (224, 224)),
+    "convnext_base": (_make_convnext_model(models.convnext_base), (224, 224)),
     "vit_b_16": (_make_vit_model(models.vit_b_16), (224, 224)),
     "vit_b_32": (_make_vit_model(models.vit_b_32), (224, 224)),
     "vit_l_16": (_make_vit_model(models.vit_l_16), (224, 224)),
