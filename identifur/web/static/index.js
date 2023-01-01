@@ -23,16 +23,16 @@ const FileImg = ({ file, ...props }) => {
 
 const App = () => {
     const [file, setFile] = React.useState(null);
-    const [gradcam, setGradcam] = React.useState(null);
+    const [gradcam, setGradcam] = React.useState();
     const [predictions, setPredictions] = React.useState();
 
     return html`<div>
         <input
             type="file"
-            disabled=${predictions === null}
+            disabled=${predictions === null || gradcam === null}
             onChange=${(e) => {
                 setPredictions(null);
-                setGradcam(null);
+                setGradcam(undefined);
                 (async () => {
                     try {
                         const file = e.target.files[0];
@@ -50,7 +50,7 @@ const App = () => {
                         );
                     } catch (e) {
                         setFile(null);
-                        setGradcam(null);
+                        setGradcam(undefined);
                         setPredictions(undefined);
                     }
                 })();
@@ -78,25 +78,40 @@ const App = () => {
                           ${predictions.predictions.map(
                               ({ label, score }) => html`<tr key=${label}>
                                   <td>${label}</td>
-                                  <td><tt>${score}</tt></td>
+                                  <td><tt>${(score * 100).toFixed(4)}%</tt></td>
                                   <td>
                                       <button
                                           type="button"
+                                          disabled=${gradcam === null}
                                           onClick=${() => {
                                               setGradcam(null);
 
                                               (async () => {
-                                                  const data = new FormData();
-                                                  data.append("file", file);
-                                                  data.append("label", label);
+                                                  try {
+                                                      const data =
+                                                          new FormData();
+                                                      data.append("file", file);
+                                                      data.append(
+                                                          "label",
+                                                          label
+                                                      );
 
-                                                  const blob = await (
-                                                      await fetch("/gradcam", {
-                                                          method: "POST",
-                                                          body: data,
-                                                      })
-                                                  ).blob();
-                                                  setGradcam({ label, blob });
+                                                      const blob = await (
+                                                          await fetch(
+                                                              "/gradcam",
+                                                              {
+                                                                  method: "POST",
+                                                                  body: data,
+                                                              }
+                                                          )
+                                                      ).blob();
+                                                      setGradcam({
+                                                          label,
+                                                          blob,
+                                                      });
+                                                  } catch (e) {
+                                                      setGradcam(undefined);
+                                                  }
                                               })();
                                           }}
                                       >
