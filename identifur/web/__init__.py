@@ -1,8 +1,8 @@
 from fastapi import FastAPI, UploadFile, Form, Response, HTTPException
+import multiprocessing
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
-import typing
 import uvicorn
 import functools
 import numpy as np
