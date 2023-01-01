@@ -1,4 +1,7 @@
 from fastapi import FastAPI, UploadFile, Form, Response, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+import os
 import typing
 import uvicorn
 import functools
@@ -100,6 +103,18 @@ def main():
     )
 
     app = FastAPI()
+    app.mount(
+        "/static",
+        StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")),
+        name="static",
+    )
+
+    @app.get("/")
+    async def index():
+        return FileResponse(
+            os.path.join(os.path.dirname(__file__), "index.html"),
+            media_type="text/html",
+        )
 
     @app.post("/predict")
     async def predict(
@@ -170,7 +185,3 @@ def main():
         return Response(img2_buf.getvalue(), media_type="image/png")
 
     uvicorn.run(app, host=args.host, port=args.port)
-
-
-if __name__ == "__main__":
-    main()

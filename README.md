@@ -47,5 +47,5 @@ python3 predict.py models/version_0/checkpoints/epoch=10-*.ckpt < image.jpg
 or the really bad web ui:
 
 ```sh
-python3 predict_webui.py models/version_0/checkpoints/epoch=10-*.ckpt
+python3 -m identifur.web models/version_0/checkpoints/epoch=10-*.ckpt
 ```
