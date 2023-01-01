@@ -70,7 +70,7 @@ def _make_efficientnet_v2_model(f, layers_to_freeze=6):
     return _model
 
 
-def _make_deit_model(name, layers_to_freeze=6):
+def _make_deit_model(name, layers_to_freeze=10):
     def _model(pretrained, num_labels, requires_grad=False):
         model: timm.models.VisionTransformer = torch.hub.load(
             "facebookresearch/deit:main", name, pretrained=pretrained
