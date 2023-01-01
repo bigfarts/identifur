@@ -11,3 +11,6 @@ huggingface_hub
 datasets
 mmh3
 timm
+pytorch_grad_cam
+flask
+markupsafe

@@ -41,7 +41,11 @@ then wait forever for it to finish.
 ## testing the model
 
 ```sh
-python3 predict.py models/version_0/checkpoints/epoch=10-*.ckpt image.jpg
+python3 predict.py models/version_0/checkpoints/epoch=10-*.ckpt < image.jpg
 ```
 
-maybe the model works idk lol
+or the really bad web ui:
+
+```sh
+python3 predict_webui.py models/version_0/checkpoints/epoch=10-*.ckpt
+```
