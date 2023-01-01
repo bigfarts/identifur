@@ -105,7 +105,7 @@ class E621DataModule(pl.LightningDataModule):
                 self.train,
                 transforms.Compose(
                     [
-                        # transforms.Resize(self.input_size),
+                        transforms.Resize(self.input_size),
                         transforms.RandomHorizontalFlip(p=0.5),
                         transforms.RandomRotation(degrees=180),
                         transforms.ToTensor(),
@@ -123,7 +123,7 @@ class E621DataModule(pl.LightningDataModule):
                 self.val,
                 transforms.Compose(
                     [
-                        # transforms.Resize(self.input_size),
+                        transforms.Resize(self.input_size),
                         transforms.ToTensor(),
                     ]
                 ),
@@ -138,7 +138,7 @@ class E621DataModule(pl.LightningDataModule):
                 self.val,
                 transforms.Compose(
                     [
-                        # transforms.Resize(self.input_size),
+                        transforms.Resize(self.input_size),
                         transforms.ToTensor(),
                     ]
                 ),
