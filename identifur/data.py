@@ -115,6 +115,7 @@ class E621DataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             shuffle=True,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -130,6 +131,7 @@ class E621DataModule(pl.LightningDataModule):
             ),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            persistent_workers=True,
         )
 
     def test_dataloader(self):
@@ -145,4 +147,5 @@ class E621DataModule(pl.LightningDataModule):
             ),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
+            persistent_workers=True,
         )
