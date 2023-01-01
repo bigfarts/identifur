@@ -43,7 +43,7 @@ def main():
     argparser.add_argument("data_db")
     argparser.add_argument("dataset_name")
     argparser.add_argument("--dataset-revision", default=None)
-    argparser.add_argument("--base-model", default="vit_l_16")
+    argparser.add_argument("--base-model", default="convnext_large")
     argparser.add_argument("--tags-path", default="tags")
     argparser.add_argument("--random-split-seed", default=42, type=int)
     argparser.add_argument("--batch-size", default=64, type=int)
@@ -55,7 +55,7 @@ def main():
     argparser.add_argument("--disable-auto-lr-find", default=False, action="store_true")
     argparser.add_argument("--learning-rate", default=1e-3, type=float)
     argparser.add_argument("--num-sanity-val-steps", default=2, type=int)
-    argparser.add_argument("--val-check-interval", default=1.0, type=float)
+    argparser.add_argument("--val-check-interval", default=0.25, type=float)
     argparser.add_argument("--tag-min-post-count", default=2500, type=int)
     args = argparser.parse_args()
 

@@ -36,6 +36,16 @@ def _make_vit_model(f):
     return _model
 
 
+def _make_convnext_model(f):
+    def _model(pretrained, num_labels, requires_grad=False):
+        model: models.ConvNeXt = f(weights="DEFAULT" if pretrained else None)
+        fc: nn.Linear = model.classifier[-1]  # type: ignore
+        model.classifier[-1] = nn.Linear(fc.in_features, num_labels)
+        return model
+
+    return _model
+
+
 def _make_deit_model(name):
     def _model(pretrained, num_labels, requires_grad=False):
         model = torch.hub.load(
@@ -51,6 +61,7 @@ def _make_deit_model(name):
 
 MODELS = {
     "resnet152": (_make_resnet_model(models.resnet152), (224, 224)),
+    "convnext_large": (_make_convnext_model(models.convnext_large), (224, 224)),
     "vit_b_16": (_make_vit_model(models.vit_b_16), (224, 224)),
     "vit_b_32": (_make_vit_model(models.vit_b_32), (224, 224)),
     "vit_l_16": (_make_vit_model(models.vit_l_16), (224, 224)),
