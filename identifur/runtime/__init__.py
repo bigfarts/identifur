@@ -2,7 +2,7 @@ from PIL import Image
 import numpy as np
 
 
-def _image_without_transparency(img: Image.Image):
+def image_without_transparency(img: Image.Image):
     if img.mode == "RGBA":
         img2 = Image.new("RGB", img.size, (0, 0, 0))
         img2.paste(img, mask=img.split()[3])
@@ -12,7 +12,7 @@ def _image_without_transparency(img: Image.Image):
 
 
 def preprocess_image(img, input_size=(224, 224)):
-    orig = _image_without_transparency(img)
+    orig = image_without_transparency(img)
 
     iw, ih = input_size
 

@@ -5,16 +5,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader, random_split
 import pytorch_lightning as pl
 from torchvision import transforms
-from PIL import Image
-
-
-def _image_without_transparency(img: Image.Image):
-    if img.mode == "RGBA":
-        img2 = Image.new("RGB", img.size, (0, 0, 0))
-        img2.paste(img, mask=img.split()[3])
-        return img2
-
-    return img.convert("RGB")
+from .runtime import image_without_transparency
 
 
 class E621Dataset(Dataset):
@@ -31,7 +22,7 @@ class E621Dataset(Dataset):
         tags_set = set(row["tags"])
 
         return (
-            _image_without_transparency(row["image"]),
+            image_without_transparency(row["image"]),
             torch.tensor(
                 [1.0 if id in tags_set else 0.0 for id, _ in self.tags]
                 + [1.0 if row["rating"] == i else 0.0 for i in range(3)],
