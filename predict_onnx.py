@@ -4,7 +4,6 @@ import argparse
 from PIL import Image
 import onnxruntime as ort
 from torchvision import transforms
-import torchvision.transforms.functional as F
 
 
 def sigmoid(x):
@@ -24,24 +23,7 @@ def _image_without_transparency(img: Image.Image):
     return img.convert("RGB")
 
 
-class SquarePad:
-    def __call__(self, image):
-        w, h = image.size
-        max_wh = np.max([w, h])
-        hp = int((max_wh - w) / 2)
-        vp = int((max_wh - h) / 2)
-        padding = [hp, vp, hp, vp]
-        return F.pad(image, padding, 0, "constant")
-
-
 INPUT_SIZE = 224
-
-image_transforms = transforms.Compose(
-    [
-        SquarePad(),
-        transforms.Resize(INPUT_SIZE),
-    ]
-)
 
 
 def main():
