@@ -8,14 +8,9 @@ import itertools
 import timm
 
 
-def _make_resnet_model(f, layers_to_freeze=6):
+def _make_resnet_model(f):
     def _model(pretrained, num_labels, requires_grad=False):
         model = f(weights="DEFAULT" if pretrained else None)
-
-        for child in itertools.islice(model.children(), layers_to_freeze):
-            for param in child.parameters():
-                param.requires_grad = requires_grad
-
         model.fc = nn.Linear(model.fc.in_features, num_labels)
         return model
 
