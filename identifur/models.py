@@ -8,7 +8,7 @@ import itertools
 import timm
 
 
-def _make_resnet_model(f, layers_to_freeze=4):
+def _make_resnet_model(f, layers_to_freeze=5):
     def _model(pretrained, num_labels, requires_grad=False):
         model = f(weights="DEFAULT" if pretrained else None)
 
