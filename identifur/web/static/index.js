@@ -36,6 +36,13 @@ const App = () => {
                 (async () => {
                     try {
                         const file = e.target.files[0];
+                        if (file == null) {
+                            setFile(null);
+                            setGradcam(undefined);
+                            setPredictions(undefined);
+                            return;
+                        }
+
                         setFile(file);
 
                         const data = new FormData();

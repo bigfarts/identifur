@@ -96,6 +96,13 @@ def main():
     model.eval()
     # model.freeze()
 
+    image_transforms = transforms.Compose(
+        [
+            SquarePad(),
+            transforms.Resize(input_size),
+        ]
+    )
+
     target_layers, reshape_transform = _get_gradcam_settings(model.model)
     cam = GradCAM(
         model=model,
@@ -125,7 +132,7 @@ def main():
     ):
         img = _image_without_transparency(Image.open(io.BytesIO(await file.read())))
 
-        input_img = transforms.Resize(input_size)(img)
+        input_img = image_transforms(img)
         input_img_tensor = transforms.ToTensor()(input_img).unsqueeze(0).to(device)
 
         start_time = datetime.datetime.now()
@@ -169,12 +176,7 @@ def main():
 
         img = _image_without_transparency(Image.open(io.BytesIO(await file.read())))
 
-        input_img = transforms.Compose(
-            [
-                SquarePad(),
-                transforms.Resize(input_size),
-            ]
-        )(img)
+        input_img = image_transforms(img)
         input_img_tensor = transforms.ToTensor()(input_img).unsqueeze(0).to(device)
 
         grayscale_cam = (

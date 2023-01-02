@@ -9,3 +9,5 @@ test.png
 /lightning_logs
 /tags
 /dataset
+*.ckpt
+*.onnx.pb
