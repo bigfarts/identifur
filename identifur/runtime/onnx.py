@@ -12,12 +12,18 @@ def softmax(x, axis=None):
 
 
 class Predictor:
-    def __init__(self, model_path, tags_path):
+    def __init__(
+        self,
+        model_path,
+        tags_path,
+        providers=ort.get_available_providers(),
+        provider_options=None,
+    ):
         with open(tags_path, "rt", encoding="utf-8") as f:
             self.tags = [line.rstrip("\n") for line in f]
 
         self.ort_sess = ort.InferenceSession(
-            model_path, providers=["CPUExecutionProvider"]
+            model_path, providers=providers, provider_options=provider_options
         )
 
     def predict(self, images):
