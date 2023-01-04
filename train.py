@@ -8,6 +8,7 @@ import sqlite3
 from identifur import models
 from identifur.data import E621DataModule
 import pytorch_lightning as pl
+from pytorch_lightning.loggers.wandb import WandbLogger
 
 logging.basicConfig(level=logging.INFO)
 
@@ -42,6 +43,7 @@ def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument("data_db")
     argparser.add_argument("dataset_name")
+    argparser.add_argument("--load-from-disk", default=False, action="store_true")
     argparser.add_argument("--dataset-revision", default=None)
     argparser.add_argument("--base-model", default="convnext_large")
     argparser.add_argument("--tags-path", default="tags")
@@ -68,9 +70,12 @@ def main():
             f.write(name)
             f.write("\n")
 
-    ds = datasets.load_dataset(  # type: ignore
-        args.dataset_name, revision=args.dataset_revision, split="train"
-    )
+    if args.load_from_disk:
+        ds = datasets.load_from_disk(args.dataset_name)  # type: ignore
+    else:
+        ds = datasets.load_dataset(  # type: ignore
+            args.dataset_name, revision=args.dataset_revision, split="train"
+        )
 
     dm = E621DataModule(
         dataset=ds,
@@ -99,6 +104,7 @@ def main():
         max_epochs=args.max_epochs,
         num_sanity_val_steps=args.num_sanity_val_steps,
         val_check_interval=args.val_check_interval,
+        logger=WandbLogger(),
         accelerator="gpu",
     )
     trainer.fit(model, dm)

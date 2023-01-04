@@ -113,6 +113,7 @@ class LitModel(pl.LightningModule):
         self.lr = lr
         self.criterion = nn.BCEWithLogitsLoss()
         self.accuracy = MultilabelAccuracy(num_labels=num_labels, threshold=0.8)
+        self.save_hyperparameters()
 
     def forward(self, x):
         return self.model(x)
