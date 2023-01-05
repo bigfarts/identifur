@@ -29,6 +29,21 @@ class Predictor:
         )[0]
 
         return [
-            (sigmoid(prediction[:-3]), softmax(prediction[-3:]))
+            (
+                sorted(
+                    (
+                        (self.tags[i], v.item())
+                        for i, v in enumerate(sigmoid(prediction[:-3]))
+                    ),
+                    key=lambda kv: kv[1],
+                    reverse=True,
+                ),
+                {
+                    k: v.item()
+                    for k, v in zip(
+                        ["safe", "questionable", "explicit"], softmax(prediction[-3:])
+                    )
+                },
+            )
             for prediction in predictions
         ]

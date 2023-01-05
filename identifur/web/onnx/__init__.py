@@ -50,21 +50,11 @@ def main():
         [(predicted_tags, predicted_rating)] = predictor.predict([img])
         dur = datetime.datetime.now() - start_time
 
-        predicted_tags = sorted(
-            enumerate(predicted_tags), key=lambda kv: kv[1], reverse=True
-        )
-
         return {
             "tags": [
-                {"name": predictor.tags[id], "score": score.item()}
-                for id, score in predicted_tags[:top]
+                {"name": tag, "score": score} for tag, score in predicted_tags[:top]
             ],
-            "rating": {
-                name: p.item()
-                for name, p in zip(
-                    ["safe", "questionable", "explicit"], predicted_rating
-                )
-            },
+            "rating": predicted_rating,
             "elapsed_secs": dur.total_seconds(),
         }
 
