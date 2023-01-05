@@ -21,6 +21,46 @@ const FileImg = ({ file, ...props }) => {
     return html`<img src=${src} ...${props} />`;
 };
 
+async function preprocessImage(blob, width, height) {
+    const img = new Image();
+    img.src = URL.createObjectURL(blob);
+    try {
+        await new Promise((resolve, reject) => {
+            img.onload = () => {
+                resolve();
+            };
+            img.onerror = (e) => {
+                reject(e);
+            };
+        });
+    } finally {
+        URL.revokeObjectURL(img.src);
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const maxSide = img.width > img.height ? img.width : img.height;
+
+    const newWidth = Math.floor((img.width * canvas.width) / maxSide);
+    const newHeight = Math.floor((img.height * canvas.height) / maxSide);
+
+    ctx.drawImage(
+        img,
+        Math.floor((canvas.width - newWidth) / 2),
+        Math.floor((canvas.height - newHeight) / 2),
+        newWidth,
+        newHeight
+    );
+
+    return await new Promise((resolve) => canvas.toBlob(resolve));
+}
+
 const App = () => {
     const [file, setFile] = React.useState(null);
     const [predictions, setPredictions] = React.useState();
@@ -40,7 +80,8 @@ const App = () => {
                             return;
                         }
 
-                        setFile(file);
+                        const blob = await preprocessImage(file, 224, 224);
+                        setFile(blob);
 
                         const data = new FormData();
                         data.append("file", file);
@@ -62,7 +103,7 @@ const App = () => {
         <div>
             ${file != null
                 ? html`<div style=${{ display: "inline-block" }}>
-                      <${FileImg} file=${file} height="300" />
+                      <${FileImg} file=${file} height="224" />
                       <div>${"\u00A0"}</div>
                   </div>`
                 : null}
