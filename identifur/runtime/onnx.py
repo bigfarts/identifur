@@ -15,16 +15,13 @@ class Predictor:
     def __init__(
         self,
         model_path,
-        tags_path,
         providers=ort.get_available_providers(),
         provider_options=None,
     ):
-        with open(tags_path, "rt", encoding="utf-8") as f:
-            self.tags = [line.rstrip("\n") for line in f]
-
         self.ort_sess = ort.InferenceSession(
             model_path, providers=providers, provider_options=provider_options
         )
+        self.tags = self.ort_sess.get_modelmeta().custom_metadata_map["tags"].split(" ")
 
     def predict(self, images):
         predictions = self.ort_sess.run(

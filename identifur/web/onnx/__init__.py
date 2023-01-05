@@ -19,14 +19,11 @@ def main():
 
     argparser = argparse.ArgumentParser()
     argparser.add_argument("--model-path", default="identifur.onnx.pb")
-    argparser.add_argument("--tags-path", default="tags")
     argparser.add_argument("--host", default="127.0.0.1")
     argparser.add_argument("--port", default=3621, type=int)
     args = argparser.parse_args()
 
-    predictor = onnx.Predictor(
-        args.model_path, args.tags_path, providers=["CPUExecutionProvider"]
-    )
+    predictor = onnx.Predictor(args.model_path, providers=["CPUExecutionProvider"])
 
     app = FastAPI()
     app.mount(
